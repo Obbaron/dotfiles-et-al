@@ -1,0 +1,124 @@
+#!/usr/bin/env fish
+
+# Launch / focus application to active display
+
+if test (count $argv) -lt 1
+    echo "Usage: summon <app_class> [launch_command...]"
+    echo "Example: summon brave-browser brave --new-window" 
+    exit 1
+end
+
+set APP_CLASS $argv[1]
+set LAUNCH_COMMAND $argv[2..-1]
+
+# If no launch command provided, use the app class as the command
+if test (count $LAUNCH_COMMAND) -eq 0
+    set LAUNCH_COMMAND $APP_CLASS
+end
+
+# Get the active display number
+set ACTIVE_OUTPUT (qdbus6 org.kde.KWin /KWin activeOutputName)
+set ACTIVE_DISPLAY (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output:" | grep "$ACTIVE_OUTPUT" | awk '{print $2}')
+
+if test -z "$ACTIVE_DISPLAY"
+    echo "Error: Could not determine active display"
+    exit 1
+end
+
+echo "Active display: $ACTIVE_DISPLAY"
+
+# Search for existing windows of this application
+set windows (kdotool search --class $APP_CLASS 2>/dev/null)
+
+# If no windows exist, launch a new instance
+if test (count $windows) -eq 0
+    echo "No existing windows found. Launching new instance..."
+    open-on-display $ACTIVE_DISPLAY $LAUNCH_COMMAND
+    exit 0
+end
+
+echo "Found "(count $windows)" existing window(s)"
+
+# Get display geometries once for efficiency
+set all_displays (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output:" | awk '{print $2}')
+
+# Separate windows into those on active display vs other displays
+set -g windows_on_active
+set -g windows_on_other
+
+for window in $windows
+    # Get window position
+    set geometry (kdotool getwindowgeometry $window | string collect)
+    set position_line (echo $geometry | grep "Position:")
+    set win_x (math "floor("(echo $position_line | awk '{print $2}' | cut -d',' -f1)")")
+    set win_y (math "floor("(echo $position_line | awk '{print $2}' | cut -d',' -f2)")")
+    
+    # Determine which display this window is on
+    set window_display ""
+    
+    for disp in $all_displays
+        # Get geometry for this display
+        set geom_line (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output: $disp " -A 30 | grep "Geometry:")
+        set coords (echo $geom_line | awk '{print $2}')
+        set size (echo $geom_line | awk '{print $3}')
+        
+        # Parse display bounds
+        set x_start (echo $coords | cut -d',' -f1)
+        set y_start (echo $coords | cut -d',' -f2)
+        set width (echo $size | cut -d'x' -f1)
+        set height (echo $size | cut -d'x' -f2)
+        set x_end (math "$x_start + $width")
+        set y_end (math "$y_start + $height")
+        
+        # Check if window is within this display's bounds
+        if test $win_x -ge $x_start -a $win_x -lt $x_end -a $win_y -ge $y_start -a $win_y -lt $y_end
+            set window_display $disp
+            break
+        end
+    end
+    
+    # Categorize window by display
+    if test "$window_display" = "$ACTIVE_DISPLAY"
+        set -a windows_on_active $window
+    else
+        set -a windows_on_other $window
+    end
+end
+
+# Priority 1: If windows exist on active display, focus the first one
+if test (count $windows_on_active) -gt 0
+    echo "Focusing existing window on active display..."
+    set target_window $windows_on_active[1]
+    echo "Target window ID: $target_window"
+    kdotool windowactivate $target_window
+    exit 0
+end
+
+# Priority 2: If windows exist on other displays, move one to active display
+if test (count $windows_on_other) -gt 0
+    echo "Moving window from another display to active display..."
+    
+    # Get active display geometry
+    set active_geom_line (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output: $ACTIVE_DISPLAY " -A 30 | grep "Geometry:")
+    set active_coords (echo $active_geom_line | awk '{print $2}')
+    set active_size (echo $active_geom_line | awk '{print $3}')
+    
+    set x_offset (echo $active_coords | cut -d',' -f1)
+    set y_offset (echo $active_coords | cut -d',' -f2)
+    set width (echo $active_size | cut -d'x' -f1)
+    set height (echo $active_size | cut -d'x' -f2)
+    
+    # Move and resize the first window from another display
+    set target_window $windows_on_other[1]
+    kdotool windowsize $target_window $width $height
+    sleep 0.1
+    kdotool windowmove $target_window $x_offset $y_offset
+    kdotool windowactivate $target_window
+    
+    echo "Window moved and focused on display $ACTIVE_DISPLAY"
+    exit 0
+end
+
+# Should never reach here, but just in case
+echo "Error: Unexpected state - windows found but couldn't be categorized"
+exit 1
