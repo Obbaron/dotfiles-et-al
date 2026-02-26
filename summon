@@ -1,124 +1,114 @@
-#!/usr/bin/env fish
+#!/bin/bash
+#
+# summon.sh (kdotool)
+#
+# Launches an app or focuses running. Brings to active display.
 
-# Launch / focus application to active display
+DEBUG=false
+LOG_FILE="/tmp/summon.log"
+CLASS_NAME="$1"
 
-if test (count $argv) -lt 1
-    echo "Usage: summon <app_class> [launch_command...]"
-    echo "Example: summon brave-browser brave --new-window" 
+debug() {
+    if [ "$DEBUG" = true ]; then
+        echo "[DEBUG] $1" >> $LOG_FILE
+    fi
+}
+
+debug "Script started for class: '$CLASS_NAME'"
+
+declare -A LAUNCH_MAP
+LAUNCH_MAP["brave-browser"]="brave &"
+LAUNCH_MAP["steam"]="steam &"
+LAUNCH_MAP["spotify"]="spotify &"
+LAUNCH_MAP["org.kde.konsole"]="konsole &"
+LAUNCH_MAP["systemsettings"]="systemsettings &"
+debug "Application map loaded."
+
+if [ -z "$CLASS_NAME" ]; then
+    echo "Usage: $0 \"resourceClass\"" >&2
+    debug "Error: No resourceClass argument provided. Exiting."
     exit 1
-end
+fi
+debug "Argument check passed."
 
-set APP_CLASS $argv[1]
-set LAUNCH_COMMAND $argv[2..-1]
-
-# If no launch command provided, use the app class as the command
-if test (count $LAUNCH_COMMAND) -eq 0
-    set LAUNCH_COMMAND $APP_CLASS
-end
-
-# Get the active display number
-set ACTIVE_OUTPUT (qdbus6 org.kde.KWin /KWin activeOutputName)
-set ACTIVE_DISPLAY (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output:" | grep "$ACTIVE_OUTPUT" | awk '{print $2}')
-
-if test -z "$ACTIVE_DISPLAY"
-    echo "Error: Could not determine active display"
+if ! [[ -v LAUNCH_MAP[$CLASS_NAME] ]]; then
+    echo "Error: Unknown resourceClass '$CLASS_NAME'." >&2
+    echo "Please add it to the 'APPLICATION MAP' in $0" >&2
+    debug "Error: resourceClass '$CLASS_NAME' not found in map. Exiting."
     exit 1
-end
+fi
+debug "resourceClass '$CLASS_NAME' found in map."
 
-echo "Active display: $ACTIVE_DISPLAY"
+if ! command -v kdotool &> /dev/null; then
+    echo "Error: kdotool is not installed. Please install it from the AUR." >&2
+    debug "Error: kdotool command not found. Exiting."
+    exit 1
+fi
+debug "kdotool command found at: $(which kdotool)"
 
-# Search for existing windows of this application
-set windows (kdotool search --class $APP_CLASS 2>/dev/null)
+LAUNCH_COMMAND=${LAUNCH_MAP[$CLASS_NAME]}
+debug "Launch command set to: $LAUNCH_COMMAND"
 
-# If no windows exist, launch a new instance
-if test (count $windows) -eq 0
-    echo "No existing windows found. Launching new instance..."
-    open-on-display $ACTIVE_DISPLAY $LAUNCH_COMMAND
-    exit 0
-end
+CURRENT_DISPLAY=$(qdbus6 org.kde.KWin /KWin activeOutputName)
+debug "Current display: $CURRENT_DISPLAY"
 
-echo "Found "(count $windows)" existing window(s)"
+debug "Searching for windows with class: $CLASS_NAME"
+POSSIBLE_IDS=$(kdotool search --class "$CLASS_NAME")
 
-# Get display geometries once for efficiency
-set all_displays (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output:" | awk '{print $2}')
+SAME_DISPLAY_ID=""
+OTHER_DISPLAY_ID=""
 
-# Separate windows into those on active display vs other displays
-set -g windows_on_active
-set -g windows_on_other
-
-for window in $windows
-    # Get window position
-    set geometry (kdotool getwindowgeometry $window | string collect)
-    set position_line (echo $geometry | grep "Position:")
-    set win_x (math "floor("(echo $position_line | awk '{print $2}' | cut -d',' -f1)")")
-    set win_y (math "floor("(echo $position_line | awk '{print $2}' | cut -d',' -f2)")")
+if [ -n "$POSSIBLE_IDS" ]; then
+    readarray -t ID_ARRAY <<< "$POSSIBLE_IDS"
+    debug "Search returned ${#ID_ARRAY[@]} IDs: ${ID_ARRAY[*]}"
     
-    # Determine which display this window is on
-    set window_display ""
-    
-    for disp in $all_displays
-        # Get geometry for this display
-        set geom_line (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output: $disp " -A 30 | grep "Geometry:")
-        set coords (echo $geom_line | awk '{print $2}')
-        set size (echo $geom_line | awk '{print $3}')
+    for id in "${ID_ARRAY[@]}"; do
+        debug "Inspecting ID: $id"
+        ACTUAL_CLASS=$(kdotool getwindowclassname "$id")
+        debug "  -> Actual class: '$ACTUAL_CLASS'"
         
-        # Parse display bounds
-        set x_start (echo $coords | cut -d',' -f1)
-        set y_start (echo $coords | cut -d',' -f2)
-        set width (echo $size | cut -d'x' -f1)
-        set height (echo $size | cut -d'x' -f2)
-        set x_end (math "$x_start + $width")
-        set y_end (math "$y_start + $height")
-        
-        # Check if window is within this display's bounds
-        if test $win_x -ge $x_start -a $win_x -lt $x_end -a $win_y -ge $y_start -a $win_y -lt $y_end
-            set window_display $disp
-            break
-        end
-    end
-    
-    # Categorize window by display
-    if test "$window_display" = "$ACTIVE_DISPLAY"
-        set -a windows_on_active $window
+        if [ "$ACTUAL_CLASS" = "$CLASS_NAME" ]; then
+            debug "  -> Matched. Checking display..."
+            
+            WIN_X=$(kdotool getwindowgeometry "$id" | grep -oP 'Position: \K\d+' | head -1)
+            debug "  -> Window x: $WIN_X"
+            
+            # HDMI-A-1: x=0 to x=1920
+            # DP-2: x=1920 to x=3840
+            if [ "$WIN_X" -lt 1920 ]; then
+                WIN_DISPLAY="HDMI-A-1"
+            else
+                WIN_DISPLAY="DP-2"
+            fi
+            debug "  -> Window display: $WIN_DISPLAY"
+            
+            if [ "$WIN_DISPLAY" = "$CURRENT_DISPLAY" ]; then
+                SAME_DISPLAY_ID="$id"
+                debug "  -> Found on active display"
+                break  # Prioritize same display
+            elif [ -z "$OTHER_DISPLAY_ID" ]; then
+                OTHER_DISPLAY_ID="$id"
+                debug "  -> Found on other display"
+            fi
+        fi
+    done
+fi
+
+if [ -n "$SAME_DISPLAY_ID" ]; then
+    debug "Action: Activating window: $SAME_DISPLAY_ID"
+    kdotool windowactivate "$SAME_DISPLAY_ID"
+elif [ -n "$OTHER_DISPLAY_ID" ]; then
+    debug "Action: Moving and activating window: $OTHER_DISPLAY_ID"
+    # Move window to current display
+    if [ "$CURRENT_DISPLAY" = "HDMI-A-1" ]; then
+        kdotool windowmove "$OTHER_DISPLAY_ID" 100 100
     else
-        set -a windows_on_other $window
-    end
-end
+        kdotool windowmove "$OTHER_DISPLAY_ID" 2000 100
+    fi
+    kdotool windowactivate "$OTHER_DISPLAY_ID"
+else
+    debug "Action: No matching window found. Executing launch command..."
+    eval "$LAUNCH_COMMAND"
+fi
 
-# Priority 1: If windows exist on active display, focus the first one
-if test (count $windows_on_active) -gt 0
-    echo "Focusing existing window on active display..."
-    set target_window $windows_on_active[1]
-    echo "Target window ID: $target_window"
-    kdotool windowactivate $target_window
-    exit 0
-end
-
-# Priority 2: If windows exist on other displays, move one to active display
-if test (count $windows_on_other) -gt 0
-    echo "Moving window from another display to active display..."
-    
-    # Get active display geometry
-    set active_geom_line (kscreen-doctor -o | sed 's/\x1b\[[0-9;]*m//g' | grep "Output: $ACTIVE_DISPLAY " -A 30 | grep "Geometry:")
-    set active_coords (echo $active_geom_line | awk '{print $2}')
-    set active_size (echo $active_geom_line | awk '{print $3}')
-    
-    set x_offset (echo $active_coords | cut -d',' -f1)
-    set y_offset (echo $active_coords | cut -d',' -f2)
-    set width (echo $active_size | cut -d'x' -f1)
-    set height (echo $active_size | cut -d'x' -f2)
-    
-    # Move and resize the first window from another display
-    set target_window $windows_on_other[1]
-    kdotool windowsize $target_window $width $height
-    sleep 0.1
-    kdotool windowmove $target_window $x_offset $y_offset
-    kdotool windowactivate $target_window
-    
-    echo "Window moved and focused on display $ACTIVE_DISPLAY"
-    exit 0
-end
-
-# Should never reach here, but just in case
-echo "Error: Unexpected state - windows found but couldn't be categorized"
-exit 1
+debug "Script finished."
