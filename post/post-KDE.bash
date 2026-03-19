@@ -24,3 +24,5 @@ kwriteconfig6 --file ksplashrc --group KSplash --key Engine "none"
 kwriteconfig6 --file ksplashrc --group KSplash --key Theme "none"
 
 log "Done! Reboot or log out to apply all changes."
+
+qdbus6 org.kde.KWin /KWin reconfigure
