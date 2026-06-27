@@ -6,7 +6,7 @@ if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
 fi
 
 # Env vars
-export EDITOR="vim"
+export EDITOR="nvim"
 export VISUAL="$EDITOR"
 export PAGER="less"
 export LESS="-R --mouse"
