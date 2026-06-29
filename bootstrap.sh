@@ -1,59 +1,66 @@
 #!/bin/sh
 #
-# bootstrap.sh — shell entry point for the pipeline.
-#
-# Ensures the bootstrap dependencies are present, then hands off to Python:
-#   * python >= MIN_PY_MAJOR.MIN_PY_MINOR   (version-checked, not just present)
-#   * git, curl                             (presence-checked)
-#
-# This step must be shell: you can't use Python to install Python. Once Python
-# is available it takes over (config parsing, directories, repos) and may call
-# setup.sh to install application packages from a generated manifest.
+# bootstrap.sh
+#   1. installs dependenciest: python >= 3.11 and git
+#   2. clones the project repo into the current directory
+#   3. hands off to repo's configure.py
 #
 # Usage:
-#   bootstrap.sh [ARGS...]      ARGS are passed through to the Python entry point.
-#
-# Env knobs:
-#   PYTHON_ENTRY   Python program to exec after bootstrap (default: main.py
-#                  beside this script).
-#   PKG_DRY_RUN    if set, detect and report but install nothing and don't exec.
-#   LOG_LEVEL      debug|info|warn|error (default: info). debug shows "present".
+#   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py.
+# Config:
+#   REPO_URL    git repo URL
+#   DRY_RUN     report actions but does nothing
 
 set -eu
 
-# --- locate and load the helper libraries -----------------------------------
-# shellcheck disable=SC1007
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# shellcheck source=log.sh disable=SC1091
-. "$SCRIPT_DIR/log.sh"
-# shellcheck source=pkg.sh disable=SC1091
-. "$SCRIPT_DIR/pkg.sh"
-
-# --- configuration ----------------------------------------------------------
-# shellcheck disable=SC2034
-LOG_TAG=bootstrap
-
-# Minimum acceptable Python.
+REPO_URL="${REPO_URL:-https://github.com/Obbaron/dotfiles-et-al.git}"
 MIN_PY_MAJOR=3
 MIN_PY_MINOR=11
+DRY_RUN="${DRY_RUN:-}"
 
-# Python program to hand off to once the system is ready.
-PYTHON_ENTRY="${PYTHON_ENTRY:-$SCRIPT_DIR/main.py}"
+say() { printf '[bootstrap] %s\n' "$*" >&2; }
+die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
 
-# Pipeline-wide knobs, exported so child stages (incl. setup.sh) inherit them.
-PKG_DRY_RUN="${PKG_DRY_RUN:-}"
-LOG_LEVEL="${LOG_LEVEL:-}"
-LOG_TIMESTAMP="${LOG_TIMESTAMP:-}"
-export PKG_DRY_RUN LOG_LEVEL LOG_TIMESTAMP
 
-# --- python detection -------------------------------------------------------
-#######################################
-# Echo the path of the first Python interpreter on PATH that is at least
-# MIN_PY_MAJOR.MIN_PY_MINOR. Asks the interpreter its own version rather than
-# parsing --version text. Tries specific minor names before the generic ones.
-# Outputs:   interpreter path on stdout (on success).
-# Returns:   0 if a suitable interpreter was found, 1 otherwise.
-#######################################
+run() {
+    if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
+    "$@"
+}
+
+run_priv() {
+    if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
+    if [ "$(id -u)" -eq 0 ]; then "$@"
+    elif command -v sudo >/dev/null 2>&1; then sudo "$@"
+    else die "need root or sudo to run: $*"; fi
+}
+
+detect_pkg_mgr() {
+    local pm
+    for pm in apt-get dnf dnf5 yum pacman zypper apk emerge xbps-install; do
+        command -v "$pm" >/dev/null 2>&1 && { printf '%s\n' "$pm"; return 0; }
+    done
+    return 1
+}
+
+install_pkgs() {
+    [ "$#" -ge 1 ] || return 0
+    local mgr
+    mgr=$(detect_pkg_mgr) || die "no supported package manager found"
+    say "installing via $mgr: $*"
+    case "$mgr" in
+        apt-get)
+            run_priv env DEBIAN_FRONTEND=noninteractive apt-get update
+            run_priv env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" ;;
+        dnf|dnf5|yum) run_priv "$mgr" install -y "$@" ;;
+        pacman)       run_priv pacman -Sy --noconfirm "$@" ;;
+        zypper)       run_priv zypper --non-interactive install "$@" ;;
+        apk)          run_priv apk add "$@" ;;
+        emerge)       run_priv emerge "$@" ;;
+        xbps-install) run_priv xbps-install -Sy "$@" ;;
+        *)            die "unsupported manager: $mgr" ;;
+    esac
+}
+
 find_python() {
     local py
     for py in python3.13 python3.12 python3.11 python3 python; do
@@ -66,55 +73,44 @@ find_python() {
     return 1
 }
 
-# --- main -------------------------------------------------------------------
 main() {
-    local py need pkg
+    local need py repo_dir entry
 
-    # git and curl: simple presence checks.
     need=""
-    for pkg in git curl; do
-        if pkg_is_installed "$pkg"; then
-            log_debug "present: $pkg"
-        else
-            log_info "missing: $pkg"
-            need="$need $pkg"
-        fi
-    done
+    command -v git >/dev/null 2>&1 || need="$need git"
 
-    # python: a VERSION check, not a presence check. Queue the distro default
-    # only if no suitable interpreter already exists.
+    py=""
     if py=$(find_python); then
-        log_info "python ok: $py ($("$py" --version 2>&1))"
+        say "python ok: $py ($("$py" --version 2>&1))"
     else
-        log_info "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
+        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
         need="$need python3"
     fi
 
-    # Install whatever is missing, once.
-    if [ -n "$need" ]; then
-        log_info "refreshing package index"
-        pkg_update
-        log_info "installing:$need"
-        # shellcheck disable=SC2086
-        pkg_install $need
+    [ -z "$need" ] || install_pkgs $need
+
+    if [ -z "$py" ] && [ -z "$DRY_RUN" ]; then
+        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 — install a newer Python (backport/PPA) and re-run"
+        say "python ok: $py ($("$py" --version 2>&1))"
     fi
 
-    # In dry-run nothing was really installed, so don't verify-or-exec.
-    if [ -n "${PKG_DRY_RUN:-}" ]; then
-        log_info "dry run: would verify python and exec $PYTHON_ENTRY"
+    repo_dir=$(basename "$REPO_URL" .git)
+    if [ -e "$repo_dir" ]; then
+        say "repo dir already present: ./$repo_dir (skipping clone)"
+    else
+        say "cloning $REPO_URL -> ./$repo_dir"
+        run git clone "$REPO_URL" "$repo_dir"
+    fi
+
+    entry="$repo_dir/configure.py"
+    if [ -n "$DRY_RUN" ]; then
+        say "dry run: would exec ${py:-python3} $entry $*"
         return 0
     fi
-
-    # Re-verify python after a real install. If the distro's python3 is older
-    # than required, stop with guidance instead of conjuring a newer one.
-    if [ -z "$py" ]; then
-        py=$(find_python) || log_fatal "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR not available after installing python3 — install a newer Python (e.g. a backport or PPA) and re-run"
-        log_info "python ok: $py ($("$py" --version 2>&1))"
-    fi
-
-    [ -r "$PYTHON_ENTRY" ] || log_fatal "python entry point not found: $PYTHON_ENTRY"
-    log_info "handing off to python: $PYTHON_ENTRY"
-    exec "$py" "$PYTHON_ENTRY" "$@"
+    [ -r "$entry" ] || die "python entry not found: $entry"
+    say "handing off to $entry"
+    cd "$repo_dir"
+    exec "$py" configure.py "$@"
 }
 
 main "$@"
