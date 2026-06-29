@@ -1,5 +1,8 @@
 # .bashrc
 
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
 PS1='\[\e[32m\]\u\[\e[2;32m\]@\h\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ '
 
 # Source global definitions
@@ -15,7 +18,7 @@ shopt -s histappend
 shopt -s checkwinsize
 shopt -s cdspell
 
-# User aliases and functions
+# Env vars, aliases, and functions
 if [ -d ~/.bashrc.d ]; then
     for rc in ~/.bashrc.d/*; do
         if [ -f "$rc" ]; then
@@ -25,5 +28,6 @@ if [ -d ~/.bashrc.d ]; then
 fi
 unset rc
 
-# cd alias
 eval "$(zoxide init bash --cmd cd)"
+eval "$(starship init bash)"
+fastfetch
