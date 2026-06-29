@@ -1,4 +1,5 @@
-#!/bin/sh - install-pkg.sh
+#!/bin/sh
+# install-pkg.sh
 set -eu
 
 usage() {
@@ -46,7 +47,7 @@ die() { log error "$*"; exit 1; }
 detect_mgr() {
     local mgr
     for mgr in apt-get dnf dnf5 yum pacman zypper apk emerge xbps-install; do
-        command -v "$m" >/dev/null 2>&1 && { printf '%s\n' "$m"; return 0; }
+        command -v "$mgr" >/dev/null 2>&1 && { printf '%s\n' "$mgr"; return 0; }
     done
     return 1
 }
