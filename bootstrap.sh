@@ -1,31 +1,31 @@
 #!/bin/sh
-#
 # bootstrap.sh
-#   1. installs dependenciest: python >= 3.11 and git
-#   2. clones the project repo into the current directory
-#   3. hands off to repo's configure.py
+#   1. installs dependencies: python >= 3.11 and git
+#   2. fetches the project's root files (pinned to REF) into a tmp dir
+#   3. hands off to configure.py, which does the rest and removes the tmp dir
 #
 # Usage:
 #   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py
-# Config:
-#   REPO_URL    git repo URL
-#   DRY_RUN     report actions but does nothing
+# Config (read from env; override for testing):
+#   REF       git ref to fetch/clone (tag by default)
+#   REPO      owner/name on the forge
+#   REPO_URL  git clone URL (handed to configure.py)
+#   RAW_BASE  base URL for raw file fetches
+#   DRY_RUN   report actions but does nothing
 
 set -eu
 
-REPO_URL="${REPO_URL:-https://github.com/Obbaron/dotfiles-et-al.git}"
+REF="${REF:-v1.0.0}"
+REPO="${REPO:-Obbaron/dotfiles-et-al}"
+REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
+RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/$REPO/$REF}"
+ROOT_FILES="configure.py config.toml install-pkg.sh"
 MIN_PY_MAJOR=3
 MIN_PY_MINOR=11
 DRY_RUN="${DRY_RUN:-}"
 
 say() { printf '[bootstrap] %s\n' "$*" >&2; }
 die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
-
-
-run() {
-    if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
-    "$@"
-}
 
 run_priv() {
     if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
@@ -73,12 +73,21 @@ find_python() {
     return 1
 }
 
+set_fetch() {
+    if command -v curl >/dev/null 2>&1; then
+        fetch() { curl -fsSL "$1" -o "$2"; }
+    elif command -v wget >/dev/null 2>&1; then
+        fetch() { wget -qO "$2" "$1"; }
+    else
+        die "need curl or wget to fetch project files"
+    fi
+}
+
 main() {
-    local need py repo_dir entry
+    local need py f
 
     need=""
     command -v git >/dev/null 2>&1 || need="$need git"
-
     py=""
     if py=$(find_python); then
         say "python ok: $py ($("$py" --version 2>&1))"
@@ -86,31 +95,35 @@ main() {
         say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
         need="$need python3"
     fi
-
+    # shellcheck disable=SC2086
     [ -z "$need" ] || install_pkgs $need
-
     if [ -z "$py" ] && [ -z "$DRY_RUN" ]; then
-        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 — install a newer Python (backport/PPA) and re-run"
+        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 - install a newer Python and re-run"
         say "python ok: $py ($("$py" --version 2>&1))"
     fi
+    
+    set_fetch
+    tmpdir=$(mktemp -d) || die "mktemp failed"
+    trap 'rm -rf "$tmpdir"' EXIT INT TERM
+    say "fetching root files @ $REF -> $tmpdir"
+    for f in $ROOT_FILES; do
+        if [ -n "$DRY_RUN" ]; then
+            say "+ fetch $RAW_BASE/$f"
+        else
+            fetch "$RAW_BASE/$f" "$tmpdir/$f" || die "failed to fetch $f"
+            [ -s "$tmpdir/$f" ] || die "fetched empty file: $f"
+        fi
+    done
+    
+    [ -n "$DRY_RUN" ] || head -n1 "$tmpdir/configure.py" | grep -q '^#\|^import\|^from\|^"""' \
+        || die "configure.py does not look like Python - check REF / REPO"
 
-    repo_dir=$(basename "$REPO_URL" .git)
-    if [ -e "$repo_dir" ]; then
-        say "repo dir already present: ./$repo_dir (skipping clone)"
-    else
-        say "cloning $REPO_URL -> ./$repo_dir"
-        run git clone "$REPO_URL" "$repo_dir"
-    fi
-
-    entry="$repo_dir/configure.py"
     if [ -n "$DRY_RUN" ]; then
-        say "dry run: would exec ${py:-python3} $entry $*"
+        say "dry run: would exec ${py:-python3} $tmpdir/configure.py $tmpdir $REF $REPO_URL $*"
         return 0
     fi
-    [ -r "$entry" ] || die "python entry not found: $entry"
-    say "handing off to $entry"
-    cd "$repo_dir"
-    exec "$py" configure.py "$@"
+    say "handing off to configure.py"
+    exec "$py" "$tmpdir/configure.py" "$tmpdir" "$REF" "$REPO_URL" "$@"
 }
 
 main "$@"
