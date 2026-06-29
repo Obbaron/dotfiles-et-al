@@ -1,115 +1,67 @@
 # .dotfiles-et-al
 
-Personal dotfiles and Linux system bootstrap repository.
+Personal dotfiles repo and bootstrap script.
 
-## Bootstrap
+## Flow
 
-The `bstrap` directory contains a post-install bootstrap script to set up a new system from scratch.
-
-### Quick Start
-
-Create and enter a directory for the bootstrap files:
-
-```bash
-mkdir bstrap && cd bstrap
+```
+bootstrap.sh ──► configure.py ──► install-pkg.sh
+  (shell)          (python)          (shell)
 ```
 
-Download the script using either `curl` or `wget`:
+1. **bootstrap.sh** — the only thing fetched on its own (curl/wget). It:
+   - ensures the dependencies **python ≥ 3.11** and **git**;
+   - fetches the root files (`configure.py`, `config.toml`, `install-pkg.sh`),
+     pinned to a tag, into a temp dir;
+   - hands off to `configure.py` and steps out of the way.
+2. **configure.py** — the orchestrator. Reads `config.toml`, resolves the
+   selected profile, generates a package manifest, calls `install-pkg.sh`,
+   sparse-clones the repo at the same tag, then applies directories, files,
+   links, services, and commands. Owns and removes the temp dir.
+3. **install-pkg.sh** — self-contained package installer. Detects the system
+   package manager and installs from a manifest and/or named packages.
 
-**curl:**
-```bash
-curl -fsL https://raw.githubusercontent.com/Obbaron/.dotfiles-et-al/main/bstrap/bstrap.sh -o bstrap.sh && chmod +x bstrap.sh
+## Usage
+
+```sh
+# typical: fetch bootstrap.sh, then run it with a profile
+./bootstrap.sh --profile desktop
+
+# preview without changing anything
+DRY_RUN=1 ./bootstrap.sh --profile server
+
+# test against an unreleased ref
+REF=main ./bootstrap.sh --profile minimal
 ```
 
-**wget:**
-```bash
-wget -qO bstrap.sh https://raw.githubusercontent.com/Obbaron/.dotfiles-et-al/main/bstrap/bstrap.sh && chmod +x bstrap.sh
+`install-pkg.sh` is also usable on its own:
+
+```sh
+./install-pkg.sh gcc ripgrep            # install named packages
+./install-pkg.sh -f manifest.txt        # install from a manifest
+./install-pkg.sh -n -l debug -f m.txt   # dry run, verbose
 ```
 
-Then run it:
-```bash
-./bstrap.sh
-```
+## Files
 
-Or pass a profile directly:
-```bash
-./bstrap.sh desktop
-./bstrap.sh server
-./bstrap.sh minimal
-```
+| file             | role                                                       |
+|------------------|------------------------------------------------------------|
+| `bootstrap.sh`   | entry point; ensures deps, fetches root files, hands off   |
+| `configure.py`   | orchestrator; reads config, applies the profile            |
+| `install-pkg.sh` | package installer (manifest- and CLI-driven)               |
+| `config.toml`    | declarative config: profiles, packages, dirs, links, …     |
 
-### Configuration
+## Conventions
 
-All configuration is driven by `bstrap.yaml`. If not present it will be downloaded automatically from this repository.
+- Shell is **POSIX `sh`** (`#!/bin/sh`): runs under dash/busybox/bash, Alpine
+  included. ShellCheck-clean apart from the accepted `local` (SC3043) and the
+  intentional word-split (SC2086) sites.
+- Package-manager support: apt-get, dnf/dnf5/yum, pacman, zypper, apk, emerge,
+  xbps-install. Detection probes PATH for the binary, so distro derivatives
+  resolve correctly.
 
-#### Packages
+## Release note
 
-Packages are grouped by category and filtered by profile:
-
-```yaml
-packages:
-  terminal:
-    - name: btop
-      profiles: [desktop, server]
-```
-
-If a package has a different name across distros, use the optional `distro` block:
-
-```yaml
-    - name: python-yaml
-      distro:
-        arch: python-yaml
-        fedora: python3-pyyaml
-        ubuntu: python3-yaml
-      profiles: [desktop, server, minimal]
-```
-
-#### Directories
-
-Directories to create, filtered by profile:
-
-```yaml
-directories:
-  - path: ~/.config
-    profiles: [desktop, server, minimal]
-```
-
-#### Permissions
-
-Set permissions on paths, filtered by profile:
-
-```yaml
-permissions:
-  - path: ~/.ssh
-    mode: "700"
-    profiles: [desktop, server, minimal]
-```
-
-#### Services
-
-Services to enable, filtered by profile:
-
-```yaml
-services:
-  - name: ufw
-    profiles: [desktop, server]
-```
-
-#### Dotfiles
-
-Dotfiles to deploy, with source and destination paths, filtered by profile:
-
-```yaml
-dotfiles:
-  - src: dotfiles/.bashrc
-    dst: ~/.bashrc
-    profiles: [desktop, server, minimal]
-```
-
-#### Profiles
-
-The three built-in profiles are `minimal`, `server`, and `desktop`. Each entry in the YAML can belong to one or more profiles. To add a package to multiple profiles simply list them:
-
-```yaml
-profiles: [desktop, server, minimal]
-```
+`bootstrap.sh` pins `REF` to a release tag. When cutting a new tag, **bump
+`REF` in `bootstrap.sh`** so it fetches the matching root files. `RAW_BASE`
+hardcodes GitHub's raw-URL scheme — change it if the repo moves forges.
