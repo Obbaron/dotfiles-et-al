@@ -1,0 +1,235 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# MASTER CONFIG
+# ═══════════════════════════════════════════════════════════════════════════
+#  Pipeline:
+#   packages → directories → git → files → fonts → links → services → commands
+#
+# ── Profiles ───────────────────────────────────────────────────────────────
+#  Profiles are collections of `step.module` references: `packages.minimal`
+#
+# ── Item forms ─────────────────────────────────────────────────────────────
+#  bare string  ⇒ canonical name == command name      ("vim", "wget")
+#  table        ⇒ they differ, or extra fields needed  ({ name=…, alias=… })
+#
+# ── requires ───────────────────────────────────────────────────────────────
+# `requires = ["step.module", …]` to pull other modules in transitively or
+#  invalid config
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ── profiles ─────────────────────────────────────────────────────────────────
+
+[profiles]
+minimal = ["*.minimal", "links.bash"]
+
+server = [
+  "*.minimal",
+  "packages.net",
+  "packages.firewall",
+  "packages.utils",
+  "directories.xdg_base",
+  "links.bash",
+  "links.vim",
+  "services.firewall",
+  "commands.firewall",
+]
+
+desktop = [
+  "*.minimal",
+  "packages.terminal",
+  "packages.dev",
+  "directories.xdg_base",
+  "directories.xdg_user",
+  "directories.system",
+  "git.ohpal",
+  "git.ttrpy",
+  "fonts.jetbrains",
+  "links.bash",
+  "links.vim",
+  "commands.fonts",
+]
+
+
+# ── packages ───────────────────────────────────────────────────────────────
+# Keyed on canonical name; `alias` = the command
+
+[packages.minimal]
+items = [
+  "nvim",
+  { name = "ripgrep", alias = "rg" },
+  "which",
+  "unzip",
+  "vim"
+]
+
+[packages.terminal]
+items = [
+  "yazi",
+  "fastfetch",
+  "fzf",
+  "eza",
+  "zoxide",
+  "starship",
+  "btop"
+]
+
+[packages.dev]
+items = [
+  "uv"
+]
+
+[packages.net]
+items = [
+  "wget"
+]
+
+[packages.firewall]
+items = [
+  "ufw"
+]
+
+[packages.utils]
+items = [
+  { name = "p7zip", alias = "7z" },   # canonical ≠ command
+  "tar"
+]
+
+
+# ── directories ────────────────────────────────────────────────────────────
+# bare string     ⇒ mkdir -p with default mode
+# { path, mode }  ⇒ explicit mode
+# { path, label } ⇒ also register as the named XDG user dir
+
+[directories.minimal]
+items = [
+  "~/.bashrc.d",
+  "~/.local/bin",
+  "~/.config",
+  { path = "~/.ssh", mode = "700" }
+]
+
+[directories.xdg_base]
+items = [
+  "~/.local/share",
+  "~/.local/state",
+  "~/.cache"
+]
+
+[directories.xdg_user]
+items = [
+  { path = "~/Audio", label = "Music" },
+  "~/Desktop",
+  "~/Documents",
+  "~/Downloads",
+  "~/Projects",
+  "~/Templates",
+  "~/Public",
+  { path = "~/Images", label = "Pictures" },
+  "~/Videos"
+]
+
+[directories.system]
+items = [
+  "~/.local/share/fonts",
+  "~/.local/share/applications",
+  "~/.local/share/icons",
+  "~/.config/system/user"
+]
+
+
+# ── git ────────────────────────────────────────────────────────────────────
+# { url, target } Repos cloned into target if absent
+
+[git.minimal]
+items = [
+  { url = "https://github.com/Obbaron/.dotfiles-et-al.git", target = "~" },
+  { url = "https://github.com/Obbaron/.gbin.git", target = "~" }
+]
+
+[git.ohpal]
+requires = ["directories.xdg_user"]   # target ~/Projects must exist
+items = [
+  { url = "https://github.com/Obbaron/ohpal.git", target = "~/Projects" }
+]
+
+[git.ttrpy]
+requires = ["directories.xdg_user"]
+items = [
+  { url = "https://github.com/Obbaron/ttrpy.git", target = "~/Projects" }
+]
+
+
+# ── files ──────────────────────────────────────────────────────────────────
+# { path, mode }           ⇒ ensure file exists (touch if absent) + chmod
+# { path, mode, content }  ⇒ overwrite with inline content on every apply
+# { path, mode, source  }  ⇒ copy from source on every apply
+#
+# NOTE: if source is a cloned git repo add that repo's module to `requires`
+
+[files.minimal]
+requires = ["directories.minimal"]   # ~/.ssh (mode 700) must exist
+items = [
+  { path = "~/.ssh/authorized_keys", mode = "600" }   # ensure-exists + chmod
+]
+
+
+# ── fonts ──────────────────────────────────────────────────────────────────
+
+[fonts.jetbrains]
+requires = ["directories.system"] 
+items = [
+  "JetBrainsMono"
+]
+
+
+# ── links ──────────────────────────────────────────────────────────────────
+# { src, dest }            ⇒ symlink dest → src (default)
+# { src, dest, copy=true } ⇒ copy src to dest
+
+[links.bash]
+requires = ["git.minimal", "directories.minimal"]   # repo cloned && ~/.bashrc.d exists
+items = [
+  { src = "~/.dotfiles-et-al/bash/.bashrc", dest = "~/.bashrc" },
+  { src = "~/.dotfiles-et-al/bash/.bash_profile", dest = "~/.bash_profile" },
+  { src = "~/.dotfiles-et-al/bash/.bashrc.d/aliases.sh", dest = "~/.bashrc.d/aliases.sh" },
+  { src = "~/.dotfiles-et-al/bash/.bashrc.d/functions.sh", dest = "~/.bashrc.d/functions.sh" }
+]
+
+[links.vim]
+requires = ["git.minimal"]
+items = [
+  { src = "~/.dotfiles-et-al/vim/.vimrc", dest = "~/.vimrc" }
+]
+
+
+# ── services ───────────────────────────────────────────────────────────────
+# { name, enabled, started, scope }
+#   scope   = "system" (default, needs sudo) | "user"
+
+[services.firewall]
+requires = ["packages.firewall"]
+items = [
+  { name = "ufw", enabled = true, started = true }
+]
+
+
+# ── commands ───────────────────────────────────────────────────────────────
+# { run, desc, cwd, creates, unless, sudo }
+#   run     = command
+#   desc    = description
+#   cwd     = working directory
+#   creates = skip if path exists
+#   unless  = skip if check succeeds (guardless command always runs)
+#   sudo    = true to escalate (default false)
+
+[commands.fonts]
+requires = ["fonts.jetbrains"]
+items = [
+  { run = "fc-cache -f", desc = "Rebuild font cache", creates = "~/.cache/fontconfig" }
+]
+
+[commands.firewall]
+requires = ["services.firewall"]
+items = [
+  { run = "ufw default deny incoming", desc = "Default-deny inbound", sudo = true, unless = "ufw status verbose | grep -q 'deny (incoming)'" }
+]
