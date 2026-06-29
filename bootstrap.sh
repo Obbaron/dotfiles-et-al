@@ -6,7 +6,7 @@
 #   3. hands off to repo's configure.py
 #
 # Usage:
-#   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py.
+#   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py
 # Config:
 #   REPO_URL    git repo URL
 #   DRY_RUN     report actions but does nothing
