@@ -2,6 +2,23 @@
 
 Personal dotfiles repo and bootstrap script.
 
+## Quickstart
+
+Curl bootstrap script; replace `<profile>` with desired profile:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Obbaron/.dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
+  && chmod +x bootstrap.sh \
+  && ./bootstrap.sh <profile>
+```
+Or, with wget:
+
+```sh
+wget -qo- https://raw.githubusercontent.com/Obbaron/.dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
+  && chmod +x bootstrap.sh \
+  && ./bootstrap.sh <profile>
+```
+
 ## Flow
 
 ```
