@@ -74,7 +74,6 @@ find_python() {
     return 1
 }
 
-# pick a downloader once; hide the curl/wget difference (esp. 404 handling)
 set_fetch() {
     if command -v curl >/dev/null 2>&1; then
         fetch() { curl -fsSL "$1" -o "$2"; }
@@ -85,7 +84,6 @@ set_fetch() {
     fi
 }
 
-# all three root files present in a directory?
 have_root_files() {
     [ -e "$1/configure.py" ] && [ -e "$1/config.toml" ] && [ -e "$1/install-pkg.sh" ]
 }
@@ -99,13 +97,13 @@ main() {
     if py=$(find_python); then
         say "python ok: $py ($("$py" --version 2>&1))"
     else
-        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
+        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; installing python3"
         need="$need python3"
     fi
     # shellcheck disable=SC2086
     [ -z "$need" ] || install_pkgs $need
     if [ -z "$py" ] && [ -z "$DRY_RUN" ]; then
-        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 — install a newer Python (backport/PPA) and re-run"
+        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 - install a newer Python (backport/PPA) and re-run"
         say "python ok: $py ($("$py" --version 2>&1))"
     fi
 
@@ -133,14 +131,14 @@ main() {
         done
         
         [ -n "$DRY_RUN" ] || head -n1 "$srcdir/configure.py" | grep -q '^#\|^import\|^from\|^"""' \
-            || die "configure.py does not look like Python — check REF / REPO"
+            || die "configure.py does not look like Python - check REF / REPO"
     fi
 
     if [ -n "$DRY_RUN" ]; then
         say "dry run: would exec ${py:-python3} $srcdir/configure.py $srcdir $mode $REF $REPO_URL $*"
         return 0
     fi
-    say "exec configure.py $*"
+    say "Running configure.py with profile $*"
     exec "$py" "$srcdir/configure.py" "$srcdir" "$mode" "$REF" "$REPO_URL" "$@"
 }
 
