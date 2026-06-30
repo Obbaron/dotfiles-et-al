@@ -1,16 +1,17 @@
 #!/bin/sh
 # bootstrap.sh
 #   1. installs dependencies: python >= 3.11 and git
-#   2. fetches the project's root files (pinned to REF) into a tmp dir
-#   3. hands off to configure.py, which does the rest and removes the tmp dir
+#   2. obtains the project's root files: uses local copies beside this script
+#      if present (repo re-run), else fetches them (pinned to REF) into a tmp dir
+#   3. hands off to configure.py, telling it whether that dir is disposable
 #
 # Usage:
 #   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py
 # Config (read from env; override for testing):
-#   REF       git ref to fetch/clone (tag by default)
+#   REF       git ref to fetch/clone (default: tag)
 #   REPO      owner/name on the forge
 #   REPO_URL  git clone URL (handed to configure.py)
-#   RAW_BASE  base URL for raw file fetches
+#   RAW_URL   base URL for raw file fetches
 #   DRY_RUN   report actions but does nothing
 
 set -eu
@@ -18,7 +19,7 @@ set -eu
 REF="${REF:-v1.0.0}"
 REPO="${REPO:-Obbaron/dotfiles-et-al}"
 REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
-RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/$REPO/$REF}"
+RAW_URL="${RAW_URL:-https://raw.githubusercontent.com/$REPO/$REF}"
 ROOT_FILES="configure.py config.toml install-pkg.sh"
 MIN_PY_MAJOR=3
 MIN_PY_MINOR=11
@@ -73,6 +74,7 @@ find_python() {
     return 1
 }
 
+# pick a downloader once; hide the curl/wget difference (esp. 404 handling)
 set_fetch() {
     if command -v curl >/dev/null 2>&1; then
         fetch() { curl -fsSL "$1" -o "$2"; }
@@ -83,9 +85,15 @@ set_fetch() {
     fi
 }
 
-main() {
-    local need py f
+# all three root files present in a directory?
+have_root_files() {
+    [ -e "$1/configure.py" ] && [ -e "$1/config.toml" ] && [ -e "$1/install-pkg.sh" ]
+}
 
+main() {
+    local need py f mode
+
+    # 1. dependencies: python (to run configure.py) and git (for its clone)
     need=""
     command -v git >/dev/null 2>&1 || need="$need git"
     py=""
@@ -98,32 +106,43 @@ main() {
     # shellcheck disable=SC2086
     [ -z "$need" ] || install_pkgs $need
     if [ -z "$py" ] && [ -z "$DRY_RUN" ]; then
-        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 - install a newer Python and re-run"
+        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 — install a newer Python (backport/PPA) and re-run"
         say "python ok: $py ($("$py" --version 2>&1))"
     fi
-    
-    set_fetch
-    tmpdir=$(mktemp -d) || die "mktemp failed"
-    trap 'rm -rf "$tmpdir"' EXIT INT TERM
-    say "fetching root files @ $REF -> $tmpdir"
-    for f in $ROOT_FILES; do
-        if [ -n "$DRY_RUN" ]; then
-            say "+ fetch $RAW_BASE/$f"
-        else
-            fetch "$RAW_BASE/$f" "$tmpdir/$f" || die "failed to fetch $f"
-            [ -s "$tmpdir/$f" ] || die "fetched empty file: $f"
-        fi
-    done
-    
-    [ -n "$DRY_RUN" ] || head -n1 "$tmpdir/configure.py" | grep -q '^#\|^import\|^from\|^"""' \
-        || die "configure.py does not look like Python - check REF / REPO"
+
+    srcdir=""
+    # shellcheck disable=SC1007
+    if [ -f "$0" ] \
+        && srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) \
+        && have_root_files "$srcdir"; then
+        mode="--keep"
+        say "using local root files: $srcdir"
+    else
+        mode="--ephemeral"
+        set_fetch
+        srcdir=$(mktemp -d) || die "mktemp failed"
+        trap 'rm -rf "$srcdir"' EXIT INT TERM
+        say "fetching root files @ $REF -> $srcdir"
+        # shellcheck disable=SC2086
+        for f in $ROOT_FILES; do
+            if [ -n "$DRY_RUN" ]; then
+                say "+ fetch $RAW_URL/$f"
+            else
+                fetch "$RAW_URL/$f" "$srcdir/$f" || die "failed to fetch $f"
+                [ -s "$srcdir/$f" ] || die "fetched empty file: $f"
+            fi
+        done
+        
+        [ -n "$DRY_RUN" ] || head -n1 "$srcdir/configure.py" | grep -q '^#\|^import\|^from\|^"""' \
+            || die "configure.py does not look like Python — check REF / REPO"
+    fi
 
     if [ -n "$DRY_RUN" ]; then
-        say "dry run: would exec ${py:-python3} $tmpdir/configure.py $tmpdir $REF $REPO_URL $*"
+        say "dry run: would exec ${py:-python3} $srcdir/configure.py $srcdir $mode $REF $REPO_URL $*"
         return 0
     fi
-    say "handing off to configure.py"
-    exec "$py" "$tmpdir/configure.py" "$tmpdir" "$REF" "$REPO_URL" "$@"
+    say "exec configure.py $*"
+    exec "$py" "$srcdir/configure.py" "$srcdir" "$mode" "$REF" "$REPO_URL" "$@"
 }
 
 main "$@"
