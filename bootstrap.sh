@@ -1,16 +1,16 @@
 #!/bin/sh
 # bootstrap.sh
 #   1. installs dependencies: python >= 3.11 and git
-#   2. obtains the project's root files: uses local copies beside this script
-#      if present, else fetches them into a tmp dir
+#   2. obtains the project's root files: uses local copies beside this
+#      script if present, else fetches them into a tmp dir
 #   3. hands off to configure.py, telling it whether that dir is disposable
 #
 # Usage:
 #   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py
-# Config (read from env; override for testing):
+# Config:
 #   REF       git ref to fetch/clone (default: tag)
-#   REPO      owner/name on the forge
-#   REPO_URL  git clone URL (handed to configure.py)
+#   REPO      owner/name on forge
+#   REPO_URL  git clone URL
 #   RAW_URL   base URL for raw file fetches
 #   DRY_RUN   report actions but does nothing
 
