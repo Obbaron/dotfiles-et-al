@@ -11,8 +11,7 @@
 # ╚██████╗ ╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
 #  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
 # ═══════════════════════════════════════════════════════════════════════════
-#  Pipeline:
-#   packages → directories → git → files → fonts → links → services → commands
+#  packages → directories → git → files → fonts → links → services → commands
 #
 # ── Profiles ───────────────────────────────────────────────────────────────
 #  Profiles are collections of `step.module` references: `packages.minimal`
