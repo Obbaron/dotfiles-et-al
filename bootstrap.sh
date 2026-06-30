@@ -2,7 +2,7 @@
 # bootstrap.sh
 #   1. installs dependencies: python >= 3.11 and git
 #   2. obtains the project's root files: uses local copies beside this script
-#      if present (repo re-run), else fetches them (pinned to REF) into a tmp dir
+#      if present, else fetches them into a tmp dir
 #   3. hands off to configure.py, telling it whether that dir is disposable
 #
 # Usage:
@@ -93,7 +93,6 @@ have_root_files() {
 main() {
     local need py f mode
 
-    # 1. dependencies: python (to run configure.py) and git (for its clone)
     need=""
     command -v git >/dev/null 2>&1 || need="$need git"
     py=""
