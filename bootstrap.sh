@@ -1,28 +1,29 @@
 #!/bin/sh
 # bootstrap.sh
-#   1. installs dependencies: python >= 3.11 and git
-#   2. obtains the project's root files: uses local copies beside this
-#      script if present, else fetches them into a tmp dir
-#   3. hands off to configure.py, telling it whether that dir is disposable
+#   1. ensures dependencies: git >= 2.25 and python >= 3.11
+#   2. obtains the repo at REF ($REPO_HOME, under XDG data):
+#      first run sparse-clones (root level only); a re-run fetches + checks out REF
+#   3. hands off to configure.py passing through the user's args
 #
 # Usage:
-#   ./bootstrap.sh [ARGS...]      ARGS pass through to configure.py
+#   ./bootstrap.sh <profile> [ARGS...]   ARGS pass through to configure.py
 # Config:
-#   REF       git ref to fetch/clone (default: tag)
-#   REPO      owner/name on forge
-#   REPO_URL  git clone URL
-#   RAW_URL   base URL for raw file fetches
-#   DRY_RUN   report actions but does nothing
+#   REF        git tag (or ref) to clone/checkout
+#   REPO       owner/name
+#   REPO_URL   git clone URL
+#   REPO_HOME  repo destination
+#   DRY_RUN    report actions but change nothing
 
 set -eu
 
 REF="${REF:-v1.0.0}"
 REPO="${REPO:-Obbaron/dotfiles-et-al}"
 REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
-RAW_URL="${RAW_URL:-https://raw.githubusercontent.com/$REPO/$REF}"
-ROOT_FILES="configure.py config.toml install-pkg.sh"
+REPO_HOME="${REPO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles-et-al}"
 MIN_PY_MAJOR=3
 MIN_PY_MINOR=11
+MIN_GIT_MAJOR=2
+MIN_GIT_MINOR=25
 DRY_RUN="${DRY_RUN:-}"
 
 say() { printf '[bootstrap] %s\n' "$*" >&2; }
@@ -74,72 +75,85 @@ find_python() {
     return 1
 }
 
-set_fetch() {
-    if command -v curl >/dev/null 2>&1; then
-        fetch() { curl -fsSL "$1" -o "$2"; }
-    elif command -v wget >/dev/null 2>&1; then
-        fetch() { wget -qO "$2" "$1"; }
-    else
-        die "need curl or wget to fetch project files"
-    fi
+git_ok() {
+    command -v git >/dev/null 2>&1 || return 1
+    local v major minor
+    v=$(git --version 2>/dev/null) || return 1
+    v=${v#git version }                  # "2.39.3" / "2.39.3 (Apple Git-145)"
+    major=${v%%.*}                       # "2"
+    minor=${v#*.}; minor=${minor%%.*}    # "39"
+    case "$major" in ''|*[!0-9]*) return 1 ;; esac
+    case "$minor" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$major" -gt "$MIN_GIT_MAJOR" ] && return 0
+    [ "$major" -eq "$MIN_GIT_MAJOR" ] && [ "$minor" -ge "$MIN_GIT_MINOR" ]
 }
 
-have_root_files() {
-    [ -e "$1/configure.py" ] && [ -e "$1/config.toml" ] && [ -e "$1/install-pkg.sh" ]
+clone_repo() {
+    say "cloning $REPO_URL @ $REF -> $REPO_HOME"
+    if [ -n "$DRY_RUN" ]; then
+        say "+ git -c advice.detachedHead=false clone --branch $REF --sparse $REPO_URL $REPO_HOME"
+        return 0
+    fi
+    mkdir -p "$(dirname -- "$REPO_HOME")" || die "cannot create parent of $REPO_HOME"
+    git -c advice.detachedHead=false clone --branch "$REF" --sparse "$REPO_URL" "$REPO_HOME" \
+        || die "git clone failed (check REF=$REF / REPO_URL=$REPO_URL)"
+}
+
+update_repo() {
+    say "updating repo @ $REF in $REPO_HOME"
+    if [ -n "$DRY_RUN" ]; then
+        say "+ git -C $REPO_HOME fetch --tags origin"
+        say "+ git -C $REPO_HOME checkout $REF"
+        return 0
+    fi
+    git -C "$REPO_HOME" fetch --tags origin || die "git fetch failed in $REPO_HOME"
+    git -C "$REPO_HOME" -c advice.detachedHead=false checkout "$REF" \
+        || die "git checkout $REF failed (dirty tree? resolve and re-run)"
 }
 
 main() {
-    local need py f mode
+    local need py
 
     need=""
-    command -v git >/dev/null 2>&1 || need="$need git"
+    if git_ok; then
+        say "git ok: $(git --version)"
+    else
+        say "git missing or < $MIN_GIT_MAJOR.$MIN_GIT_MINOR; will install git"
+        need="$need git"
+    fi
     py=""
     if py=$(find_python); then
         say "python ok: $py ($("$py" --version 2>&1))"
     else
-        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; installing python3"
+        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
         need="$need python3"
     fi
+
     # shellcheck disable=SC2086
     [ -z "$need" ] || install_pkgs $need
-    if [ -z "$py" ] && [ -z "$DRY_RUN" ]; then
-        py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3 - install a newer Python (backport/PPA) and re-run"
-        say "python ok: $py ($("$py" --version 2>&1))"
+
+    if [ -z "$DRY_RUN" ]; then
+        git_ok || die "git >= $MIN_GIT_MAJOR.$MIN_GIT_MINOR still unavailable after install; install a newer git and re-run"
+        if [ -z "$py" ]; then
+            py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3; install a newer Python (backport/PPA) and re-run"
+            say "python ok: $py ($("$py" --version 2>&1))"
+        fi
     fi
 
-    srcdir=""
-    # shellcheck disable=SC1007
-    if [ -f "$0" ] \
-        && srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) \
-        && have_root_files "$srcdir"; then
-        mode="--keep"
-        say "using local root files: $srcdir"
+    if [ -d "$REPO_HOME/.git" ]; then
+        update_repo
+    elif [ -e "$REPO_HOME" ]; then
+        die "$REPO_HOME exists but is not a git repo; remove it and re-run"
     else
-        mode="--ephemeral"
-        set_fetch
-        srcdir=$(mktemp -d) || die "mktemp failed"
-        trap 'rm -rf "$srcdir"' EXIT INT TERM
-        say "fetching root files @ $REF -> $srcdir"
-        # shellcheck disable=SC2086
-        for f in $ROOT_FILES; do
-            if [ -n "$DRY_RUN" ]; then
-                say "+ fetch $RAW_URL/$f"
-            else
-                fetch "$RAW_URL/$f" "$srcdir/$f" || die "failed to fetch $f"
-                [ -s "$srcdir/$f" ] || die "fetched empty file: $f"
-            fi
-        done
-        
-        [ -n "$DRY_RUN" ] || head -n1 "$srcdir/configure.py" | grep -q '^#\|^import\|^from\|^"""' \
-            || die "configure.py does not look like Python - check REF / REPO"
+        clone_repo
     fi
 
     if [ -n "$DRY_RUN" ]; then
-        say "dry run: would exec ${py:-python3} $srcdir/configure.py $srcdir $mode $REF $REPO_URL $*"
+        say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
         return 0
     fi
-    say "Running configure.py with profile $*"
-    exec "$py" "$srcdir/configure.py" "$srcdir" "$mode" "$REF" "$REPO_URL" "$@"
+    say "exec configure.py"
+    exec "$py" "$REPO_HOME/configure.py" "$@"
 }
 
 main "$@"
