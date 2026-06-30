@@ -147,11 +147,12 @@ items = [
 
 
 # ── git ────────────────────────────────────────────────────────────────────
-# { url, target } Repos cloned into target if absent
+# { url, target } Repos cloned into target if absent.
+# NOTE: the dotfiles repo itself is NOT listed here - bootstrap.sh clones it to
+# $REPO_HOME (under the XDG data dir). These are *other* repos to place.
 
 [git.minimal]
 items = [
-  { url = "https://github.com/Obbaron/.dotfiles-et-al.git", target = "~" },
   { url = "https://github.com/Obbaron/.gbin.git", target = "~" }
 ]
 
@@ -194,20 +195,22 @@ items = [
 # ── links ──────────────────────────────────────────────────────────────────
 # { src, dest }            ⇒ symlink dest → src (default)
 # { src, dest, copy=true } ⇒ copy src to dest
+# Paths expand ~ and $VARS; $REPO_HOME is the repo checkout. configure.py
+# widens the sparse checkout to include whatever tool dirs the chosen
+# links/files reference.
 
 [links.bash]
-requires = ["git.minimal", "directories.minimal"]   # repo cloned && ~/.bashrc.d exists
+requires = ["directories.minimal"]   # ~/.bashrc.d must exist (repo is at $REPO_HOME)
 items = [
-  { src = "~/.dotfiles-et-al/bash/.bashrc", dest = "~/.bashrc" },
-  { src = "~/.dotfiles-et-al/bash/.bash_profile", dest = "~/.bash_profile" },
-  { src = "~/.dotfiles-et-al/bash/.bashrc.d/aliases.sh", dest = "~/.bashrc.d/aliases.sh" },
-  { src = "~/.dotfiles-et-al/bash/.bashrc.d/functions.sh", dest = "~/.bashrc.d/functions.sh" }
+  { src = "$REPO_HOME/bash/.bashrc", dest = "~/.bashrc" },
+  { src = "$REPO_HOME/bash/.bash_profile", dest = "~/.bash_profile" },
+  { src = "$REPO_HOME/bash/.bashrc.d/aliases.sh", dest = "~/.bashrc.d/aliases.sh" },
+  { src = "$REPO_HOME/bash/.bashrc.d/functions.sh", dest = "~/.bashrc.d/functions.sh" }
 ]
 
 [links.vim]
-requires = ["git.minimal"]
 items = [
-  { src = "~/.dotfiles-et-al/vim/.vimrc", dest = "~/.vimrc" }
+  { src = "$REPO_HOME/vim/.vimrc", dest = "~/.vimrc" }
 ]
 
 
