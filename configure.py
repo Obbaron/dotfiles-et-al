@@ -294,6 +294,53 @@ def apply_directories(config: dict, modules: list[tuple[str, str]], dry_run: boo
             _apply_one_directory(module, item, dry_run)
 
 
+def _parse_git_item(module: str, item: object) -> tuple[str, str]:
+    """Return (url, target) for a git item. target is the parent directory the
+    repo is cloned into."""
+    if isinstance(item, dict) and item.get("url") and item.get("target"):
+        return item["url"], item["target"]
+    sys.exit(f"git.{module}: item needs both url and target: {item!r}")
+
+
+def _repo_dir_name(url: str) -> str:
+    """Directory name a clone of url lands in: the last path segment minus a
+    trailing .git (handles scp-style git@host:owner/repo.git too)."""
+    tail = url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    return tail[:-4] if tail.endswith(".git") else tail
+
+
+def _clone_one(module: str, item: object, dry_run: bool) -> None:
+    url, target = _parse_git_item(module, item)
+    dest = expand_path(target) / _repo_dir_name(url)
+
+    if dest.exists():
+        print(f"[configure] present: {dest} (skip)")
+        return
+    if dry_run:
+        print(f"[configure] git clone {url} -> {dest}")
+        return
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[configure] cloning {url} -> {dest}")
+    try:
+        subprocess.run(["git", "clone", url, str(dest)], check=True)
+    except subprocess.CalledProcessError as exc:
+        sys.exit(f"git.{module}: clone failed for {url} (git exited {exc.returncode})")
+
+
+def apply_git(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
+    """Clone every repo declared by the resolved git modules, in pipeline order,
+    skipping any whose destination already exists."""
+    git_modules = [(step, module) for step, module in modules if step == "git"]
+    if not git_modules:
+        return
+    total = sum(len(config[s][m].get("items", [])) for s, m in git_modules)
+    print(f"[configure] git: {total} repo(s) across {len(git_modules)} module(s)")
+    for step, module in git_modules:
+        for item in config[step][module].get("items", []):
+            _clone_one(module, item, dry_run)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="configure.py",
@@ -325,8 +372,11 @@ def main(argv: list[str]) -> int:
     # Step 2
     apply_directories(config, modules, args.dry_run)
 
+    # Step 3
+    apply_git(config, modules, args.dry_run)
+
     # Step X
-    done = ("packages", "directories")
+    done = ("packages", "directories", "git")
     later = [f"{step}.{module}" for step, module in modules if step not in done]
     if later:
         print(f"[configure] {len(later)} later module(s) not yet applied: {', '.join(later)}")
