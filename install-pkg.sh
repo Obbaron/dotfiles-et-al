@@ -126,9 +126,9 @@ _family_from_os_release() {
     case "$id" in
         ubuntu|linuxmint|pop|elementary|neon|zorin) printf 'ubuntu\n' ;;
         debian|raspbian|devuan|kali|mx)             printf 'debian\n' ;;
-        fedora)                                      printf 'fedora\n' ;;
-        rhel|centos|rocky|almalinux|ol|amzn)         printf 'centos\n' ;;
-        *)                                           printf '%s\n' "$id" ;;
+        fedora)                                     printf 'fedora\n' ;;
+        rhel|centos|rocky|almalinux|ol|amzn)        printf 'centos\n' ;;
+        *)                                          printf '%s\n' "$id" ;;
     esac
 }
 _http_get() {
@@ -207,6 +207,8 @@ resolve_pkg() {
 read_manifest() {
     [ -r "$1" ] || die "cannot read manifest: $1"
     while IFS= read -r line || [ -n "$line" ]; do
+        line=${line#"${line%%[![:space:]]*}"}   # trim leading whitespace
+        line=${line%"${line##*[![:space:]]}"}   # trim trailing whitespace
         case "$line" in ''|\#*) continue ;; esac
         printf '%s\n' "$line"
     done < "$1"
