@@ -168,7 +168,7 @@ def collect_packages(config: dict, modules: list[tuple[str, str]]) -> list[str]:
 
 
 def install_packages(repo_home: Path, names: list[str], dry_run: bool) -> None:
-    """Write the names to a transient manifest and hand it to install-pkg.sh -f."""
+    """Write the names to a transient manifest and hand it to install-pkg.sh -f"""
     if not names:
         print("[configure] packages: none to install")
         return
