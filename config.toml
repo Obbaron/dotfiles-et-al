@@ -1,32 +1,32 @@
-#     ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
-#     ██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
-#     ██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
-#     ██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
-#     ███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-#     ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
-#  ██████╗  ██████╗ ███╗   ██╗███████╗██╗ ██████╗
-# ██╔════╝ ██╔═══██╗████╗  ██║██╔════╝██║██╔════╝
-# ██║      ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗
-# ██║      ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║
-# ╚██████╗ ╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
-#  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
+#        ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
+#        ██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
+#        ██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
+#        ██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
+#        ███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
+#        ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
+#     ██████╗  ██████╗ ███╗   ██╗███████╗██╗ ██████╗
+#    ██╔════╝ ██╔═══██╗████╗  ██║██╔════╝██║██╔════╝
+#    ██║      ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗
+#    ██║      ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║
+#    ╚██████╗ ╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
+#     ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
 # ═══════════════════════════════════════════════════════════════════════════
+#  Pipeline steps:
 #  packages → directories → git → files → fonts → links → services → commands
 #
 # ── Profiles ───────────────────────────────────────────────────────────────
 #  Profiles are collections of `step.module` references: `packages.minimal`
 #
 # ── Item forms ─────────────────────────────────────────────────────────────
-#  bare string  ⇒ canonical name == command name      ("vim", "wget")
+#  bare string  ⇒ canonical name == command name       ("vim", "wget")
 #  table        ⇒ they differ, or extra fields needed  ({ name=…, alias=… })
 #
 # ── requires ───────────────────────────────────────────────────────────────
-# `requires = ["step.module", …]` to pull other modules in transitively or
-#  invalid config
+# `requires = ["step.module", …]` to pull other modules in transitively 
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-# ── profiles ─────────────────────────────────────────────────────────────────
+# ── profiles ───────────────────────────────────────────────────────────────
 
 [profiles]
 minimal = ["*.minimal", "links.bash"]
@@ -60,7 +60,7 @@ desktop = [
 
 
 # ── packages ───────────────────────────────────────────────────────────────
-# Keyed on canonical name; `alias` = the command
+# Keyed on canonical name; `alias` = command
 
 [packages.minimal]
 items = [
@@ -148,8 +148,8 @@ items = [
 
 # ── git ────────────────────────────────────────────────────────────────────
 # { url, target } Repos cloned into target if absent.
-# NOTE: the dotfiles repo itself is NOT listed here - bootstrap.sh clones it to
-# $REPO_HOME (under the XDG data dir). These are *other* repos to place.
+# NOTE: the dotfiles repo itself is NOT listed here - bootstrap.sh clones it
+# to $REPO_HOME (under the XDG data dir). These are *other* repos to place.
 
 [git.minimal]
 items = [
