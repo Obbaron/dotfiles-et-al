@@ -16,29 +16,35 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import urllib.request
+import zipfile
 from pathlib import Path
-
-STEP_ORDER = (
-    "packages", "directories", "git", "files",
-    "fonts", "links", "services", "commands",
-)
-
-
-def repo_home() -> Path:
-    return Path(__file__).resolve().parent
 
 
 def xdg_config_home() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
 
 
-def expand_path(raw: str) -> Path:
-    return Path(os.path.expanduser(os.path.expandvars(raw)))
-
-
 CONFIG_DIR = xdg_config_home() / "dotfiles-et-al"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 LOCAL_BIN = Path.home() / ".local" / "bin"
+
+STEP_ORDER = (
+    "packages", "directories", "git", "files",
+    "fonts", "links", "services", "commands",
+)
+
+NERD_FONTS_REPO = "https://github.com/ryanoasis/nerd-fonts"
+NERD_FONTS_VERSION = os.environ.get("NERD_FONTS_VERSION", "v3.4.0")
+FONTS_DIR = "~/.local/share/fonts"
+
+
+def repo_home() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def expand_path(raw: str) -> Path:
+    return Path(os.path.expanduser(os.path.expandvars(raw)))
 
 
 def ensure_infra_dirs() -> None:
@@ -194,11 +200,11 @@ def _parse_dir_item(module: str, item: object) -> tuple[str, str | None, str | N
     sys.exit(f"directories.{module}: item missing a usable path: {item!r}")
 
 
-def _parse_mode(module: str, mode: str) -> int:
+def _parse_mode(context: str, mode: str) -> int:
     try:
         return int(str(mode), 8)
     except ValueError:
-        sys.exit(f"directories.{module}: invalid octal mode: {mode!r}")
+        sys.exit(f"{context}: invalid octal mode: {mode!r}")
 
 
 def _xdg_value(path: Path) -> str:
@@ -267,7 +273,7 @@ def _apply_one_directory(module: str, item: object, dry_run: bool) -> None:
     path = expand_path(raw)
 
     if mode is not None:
-        bits = _parse_mode(module, mode)
+        bits = _parse_mode(f"directories.{module}", mode)
 
     if dry_run:
         print(f"[configure]   mkdir -p {path}" + (f" (mode {mode})" if mode else ""))
@@ -341,6 +347,143 @@ def apply_git(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> No
             _clone_one(module, item, dry_run)
 
 
+def _parse_file_item(module: str, item: object) -> tuple[str, str | None, str | None, str | None]:
+    """Return (path, mode, content, source) for a files item. path is required;
+    mode is optional; content and source are optional and mutually exclusive."""
+    if not (isinstance(item, dict) and item.get("path")):
+        sys.exit(f"files.{module}: item needs at least a path: {item!r}")
+    content = item.get("content")
+    source = item.get("source")
+    if content is not None and source is not None:
+        sys.exit(f"files.{module}: item has both content and source (choose one): {item!r}")
+    return item["path"], item.get("mode"), content, source
+
+
+def _ensure_file(module: str, path: Path) -> None:
+    """Create an empty file if absent; leave an existing file's content intact."""
+    if path.exists():
+        return
+    try:
+        path.touch()
+    except OSError as exc:
+        sys.exit(f"files.{module}: cannot create {path}: {exc} "
+                 "(does its parent dir exist? add a directories module to requires)")
+
+
+def _write_file(module: str, path: Path, content: str) -> None:
+    try:
+        path.write_text(content)
+    except OSError as exc:
+        sys.exit(f"files.{module}: cannot write {path}: {exc} "
+                 "(does its parent dir exist? add a directories module to requires)")
+
+
+def _copy_file(module: str, src: Path, path: Path) -> None:
+    if not src.exists():
+        sys.exit(f"files.{module}: source not found: {src} "
+                 "(from a cloned repo? add that git module to requires)")
+    try:
+        shutil.copyfile(src, path)
+    except OSError as exc:
+        sys.exit(f"files.{module}: cannot copy {src} -> {path}: {exc}")
+
+
+def _apply_one_file(module: str, item: object, dry_run: bool) -> None:
+    raw, mode, content, source = _parse_file_item(module, item)
+    path = expand_path(raw)
+    bits = _parse_mode(f"files.{module}", mode) if mode is not None else None
+
+    if content is not None:
+        action = f"write {path} ({len(content)} char(s))"
+    elif source is not None:
+        src = expand_path(source)
+        action = f"copy {src} -> {path}"
+    else:
+        action = f"ensure {path}"
+    suffix = f" (mode {mode})" if mode else ""
+
+    if dry_run:
+        print(f"[configure]   {action}{suffix}")
+        return
+
+    if content is not None:
+        _write_file(module, path, content)
+    elif source is not None:
+        _copy_file(module, src, path)
+    else:
+        _ensure_file(module, path)
+    if bits is not None:
+        path.chmod(bits)
+    print(f"[configure]   {action}{suffix}")
+
+
+def apply_files(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
+    """Materialize every file declared by the resolved files modules, in pipeline
+    order: ensure-exists, inline content, or copy-from-source, each then chmod'd."""
+    file_modules = [(step, module) for step, module in modules if step == "files"]
+    if not file_modules:
+        return
+    total = sum(len(config[s][m].get("items", [])) for s, m in file_modules)
+    print(f"[configure] files: {total} item(s) across {len(file_modules)} module(s)")
+    for step, module in file_modules:
+        for item in config[step][module].get("items", []):
+            _apply_one_file(module, item, dry_run)
+
+
+def _nerd_font_url(name: str) -> str:
+    if NERD_FONTS_VERSION == "latest":
+        return f"{NERD_FONTS_REPO}/releases/latest/download/{name}.zip"
+    return f"{NERD_FONTS_REPO}/releases/download/{NERD_FONTS_VERSION}/{name}.zip"
+
+
+def _install_font(module: str, name: str, dry_run: bool) -> None:
+    """Download the named Nerd Font's release zip and extract it into its own
+    subdir under ~/.local/share/fonts. Skips if subdir already has files."""
+    dest = expand_path(FONTS_DIR) / name
+    url = _nerd_font_url(name)
+
+    if dest.is_dir() and any(dest.iterdir()):
+        print(f"[configure]   present: {dest} (skip)")
+        return
+    if dry_run:
+        print(f"[configure]   fetch {url} -> {dest}/")
+        return
+
+    print(f"[configure]   fetching {name} ({NERD_FONTS_VERSION})")
+    fd, tmpzip = tempfile.mkstemp(prefix=f"nf-{name}-", suffix=".zip")
+    try:
+        with os.fdopen(fd, "wb") as out:
+            try:
+                with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 (fixed https host)
+                    shutil.copyfileobj(resp, out)
+            except OSError as exc:
+                sys.exit(f"fonts.{module}: download failed for {url}: {exc}")
+        dest.mkdir(parents=True, exist_ok=True)
+        try:
+            with zipfile.ZipFile(tmpzip) as zf:
+                zf.extractall(dest)
+        except zipfile.BadZipFile as exc:
+            sys.exit(f"fonts.{module}: not a valid zip for {name}: {exc}")
+    finally:
+        os.unlink(tmpzip)
+    print(f"[configure]   installed {name} -> {dest}")
+
+
+def apply_fonts(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
+    """Install every Nerd Font declared by the resolved fonts modules. The font
+    cache rebuild (fc-cache) is a separate commands."""
+    font_modules = [(step, module) for step, module in modules if step == "fonts"]
+    if not font_modules:
+        return
+    total = sum(len(config[s][m].get("items", [])) for s, m in font_modules)
+    print(f"[configure] fonts: {total} font(s) across {len(font_modules)} module(s)")
+    for step, module in font_modules:
+        for item in config[step][module].get("items", []):
+            if not isinstance(item, str):
+                sys.exit(f"fonts.{module}: item must be a font name string: {item!r}")
+            _install_font(module, item, dry_run)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="configure.py",
@@ -375,8 +518,14 @@ def main(argv: list[str]) -> int:
     # Step 3
     apply_git(config, modules, args.dry_run)
 
+    # Step 4
+    apply_files(config, modules, args.dry_run)
+
+    # Step 5
+    apply_fonts(config, modules, args.dry_run)
+
     # Step X
-    done = ("packages", "directories", "git")
+    done = ("packages", "directories", "git", "files", "fonts")
     later = [f"{step}.{module}" for step, module in modules if step not in done]
     if later:
         print(f"[configure] {len(later)} later module(s) not yet applied: {', '.join(later)}")
