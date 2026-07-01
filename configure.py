@@ -90,19 +90,22 @@ def modules_in_step(config: dict, step: str) -> list[str]:
 def expand_ref(config: dict, ref: str) -> list[tuple[str, str]]:
     """Expand one profile/requires ref ("step.module") to concrete (step, module)
     pairs. The step may be "*", meaning that module under every step defining it
-    (e.g. "*.minimal")."""
+    E.G. `*.minimal`."""
     if "." not in ref:
-        sys.exit(f"invalid ref (want step.module): {ref!r}")
-    step, module = ref.split(".", 1)
+        sys.exit(f"invalid ref (want `step.module`): {ref!r}")
+   
+  step, module = ref.split(".", 1)
     if step == "*":
         pairs = [(s, module) for s in STEP_ORDER if module in modules_in_step(config, s)]
         if not pairs:
             sys.exit(f"ref {ref!r} matched no modules")
         return pairs
+      
     if step not in STEP_ORDER:
         sys.exit(f"unknown step in ref {ref!r}: {step!r}")
     if module not in modules_in_step(config, step):
         sys.exit(f"unknown module in ref {ref!r}: {step}.{module}")
+    
     return [(step, module)]
 
 
@@ -208,8 +211,8 @@ def _parse_mode(context: str, mode: str) -> int:
 
 
 def _xdg_value(path: Path) -> str:
-    """Format a path for user-dirs.dirs: "$HOME/rest" when under home (matching
-    xdg-user-dirs' own style), else an absolute quoted path."""
+    """Format a path for user-dirs.dirs: "$HOME/rest" under home (matching
+    xdg-user-dirs), else absolute path."""
     try:
         rel = path.relative_to(Path.home())
     except ValueError:
@@ -219,7 +222,7 @@ def _xdg_value(path: Path) -> str:
 
 def register_xdg_user_dir(label: str, path: Path, dry_run: bool) -> None:
     """Register path as the XDG user dir named by label. Prefer the official
-    xdg-user-dirs-update tool when present.."""
+    xdg-user-dirs-update tool when present."""
     if shutil.which("xdg-user-dirs-update") and _register_xdg_via_tool(label, path, dry_run):
         return
     _register_xdg_via_file(label, path, dry_run)
@@ -507,6 +510,128 @@ def apply_fonts(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> 
         _rebuild_font_cache(dry_run)
 
 
+def _repo_tool_dirs(config: dict, modules: list[tuple[str, str]], repo_home: Path) -> list[str]:
+    """Top-level directories under REPO_HOME referenced by the resolved links
+    (src) and files (source) — the tool dirs that must be checked out."""
+    home = repo_home.resolve()
+    dirs: set[str] = set()
+
+    def consider(raw: str | None) -> None:
+        if not raw:
+            return
+        try:
+            rel = expand_path(raw).resolve().relative_to(home)
+        except ValueError:
+            return  # not under the repo
+        if rel.parts:
+            dirs.add(rel.parts[0])
+
+    for step, module in modules:
+        items = config[step][module].get("items", [])
+        if step == "links":
+            for item in items:
+                if isinstance(item, dict):
+                    consider(item.get("src"))
+        elif step == "files":
+            for item in items:
+                if isinstance(item, dict):
+                    consider(item.get("source"))
+    return sorted(dirs)
+
+
+def widen_sparse_checkout(config: dict, modules: list[tuple[str, str]],
+                          repo_home: Path, dry_run: bool) -> None:
+    """Widen the repo's cone sparse-checkout to include the tool dirs referenced
+    by the profile's links/files."""
+    dirs = _repo_tool_dirs(config, modules, repo_home)
+    if not dirs:
+        return
+    print(f"[configure] sparse-checkout: widen for {', '.join(dirs)}")
+    cmd = ["git", "-C", str(repo_home), "sparse-checkout", "set", *dirs]
+    if dry_run:
+        print(f"[configure] would run: {' '.join(cmd)}")
+        return
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        sys.exit(f"sparse-checkout widen failed (git exited {exc.returncode})")
+
+
+def _parse_link_item(module: str, item: object) -> tuple[str, str, bool]:
+    """Return (src, dest, copy) for a links item. src and dest required; copy
+    defaults to False (symlink)."""
+    if isinstance(item, dict) and item.get("src") and item.get("dest"):
+        return item["src"], item["dest"], bool(item.get("copy", False))
+    sys.exit(f"links.{module}: item needs both src and dest: {item!r}")
+
+
+def _backup_real(module: str, dest: Path) -> None:
+    """Move a pre-existing file/dir at dest aside to dest.bak before a symlink
+    replaces it (refuse if a .bak already exists)."""
+    backup = dest.with_name(dest.name + ".bak")
+    if backup.exists():
+        sys.exit(f"links.{module}: {dest} is a real file and {backup} already exists; "
+                 "resolve manually")
+    dest.rename(backup)
+    print(f"[configure] backup {dest} -> {backup}")
+
+
+def _apply_one_link(module: str, item: object, dry_run: bool) -> None:
+    raw_src, raw_dest, copy = _parse_link_item(module, item)
+    src = expand_path(raw_src)
+    dest = expand_path(raw_dest)
+
+    if copy:
+        if dry_run:
+            print(f"[configure] copy {src} -> {dest}")
+            return
+        if not src.exists():
+            sys.exit(f"links.{module}: source not found: {src} "
+                     "(repo dir not checked out? it should be via sparse-checkout)")
+        try:
+            shutil.copyfile(src, dest)
+        except OSError as exc:
+            sys.exit(f"links.{module}: cannot copy {src} -> {dest}: {exc} "
+                     "(parent dir missing? add a directories module to requires)")
+        print(f"[configure]   copy {src} -> {dest}")
+        return
+
+    if dest.is_symlink() and dest.readlink() == src:
+        print(f"[configure] present: {dest} -> {src} (skip)")
+        return
+
+    needs_backup = dest.exists() and not dest.is_symlink()
+    if dry_run:
+        if needs_backup:
+            print(f"[configure]   backup {dest} -> {dest.name}.bak")
+        print(f"[configure]   link {dest} -> {src}")
+        return
+
+    if needs_backup:
+        _backup_real(module, dest)
+    elif dest.is_symlink():
+        dest.unlink()  # existing symlink with the wrong target
+    try:
+        dest.symlink_to(src)
+    except OSError as exc:
+        sys.exit(f"links.{module}: cannot link {dest} -> {src}: {exc} "
+                 "(parent dir missing? add a directories module to requires)")
+    print(f"[configure]   link {dest} -> {src}")
+
+
+def apply_links(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
+    """Create/refresh every link declared by the resolved links modules: a
+    symlink dest -> src (default), or a copy of src to dest (copy=true)."""
+    link_modules = [(step, module) for step, module in modules if step == "links"]
+    if not link_modules:
+        return
+    total = sum(len(config[s][m].get("items", [])) for s, m in link_modules)
+    print(f"[configure] links: {total} item(s) across {len(link_modules)} module(s)")
+    for step, module in link_modules:
+        for item in config[step][module].get("items", []):
+            _apply_one_link(module, item, dry_run)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="configure.py",
@@ -540,6 +665,7 @@ def main(argv: list[str]) -> int:
 
     # Step 3
     apply_git(config, modules, args.dry_run)
+    widen_sparse_checkout(config, modules, home, args.dry_run)
 
     # Step 4
     apply_files(config, modules, args.dry_run)
@@ -547,8 +673,11 @@ def main(argv: list[str]) -> int:
     # Step 5
     apply_fonts(config, modules, args.dry_run)
 
+    # Step 6
+    apply_links(config, modules, args.dry_run)
+
     # Step X
-    done = ("packages", "directories", "git", "files", "fonts")
+    done = ("packages", "directories", "git", "files", "fonts", "links")
     later = [f"{step}.{module}" for step, module in modules if step not in done]
     if later:
         print(f"[configure] {len(later)} later module(s) not yet applied: {', '.join(later)}")
