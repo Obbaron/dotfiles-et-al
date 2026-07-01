@@ -93,19 +93,19 @@ def expand_ref(config: dict, ref: str) -> list[tuple[str, str]]:
     E.G. `*.minimal`."""
     if "." not in ref:
         sys.exit(f"invalid ref (want `step.module`): {ref!r}")
-   
-  step, module = ref.split(".", 1)
+
+    step, module = ref.split(".", 1)
     if step == "*":
         pairs = [(s, module) for s in STEP_ORDER if module in modules_in_step(config, s)]
         if not pairs:
             sys.exit(f"ref {ref!r} matched no modules")
         return pairs
-      
+
     if step not in STEP_ORDER:
         sys.exit(f"unknown step in ref {ref!r}: {step!r}")
     if module not in modules_in_step(config, step):
         sys.exit(f"unknown module in ref {ref!r}: {step}.{module}")
-    
+
     return [(step, module)]
 
 
