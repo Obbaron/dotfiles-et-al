@@ -55,7 +55,6 @@ desktop = [
   "fonts.jetbrains",
   "links.bash",
   "links.vim",
-  "commands.fonts",
 ]
 
 
@@ -233,12 +232,6 @@ items = [
 #   creates = skip if path exists
 #   unless  = skip if check succeeds (guardless command always runs)
 #   sudo    = true to escalate (default false)
-
-[commands.fonts]
-requires = ["fonts.jetbrains"]
-items = [
-  { run = "fc-cache -f", desc = "Rebuild font cache", creates = "~/.cache/fontconfig" }
-]
 
 [commands.firewall]
 requires = ["services.firewall"]
