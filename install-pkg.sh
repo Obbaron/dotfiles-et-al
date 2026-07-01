@@ -20,6 +20,7 @@ TIMESTAMP=""
 MANIFEST=""
 LEVEL=info
 MGR=""
+REPO_FAMILY=""
 ESC=$(printf '\033')
 
 
@@ -89,6 +90,118 @@ is_installed() {
         xbps-install)        xbps-query "$1" >/dev/null 2>&1 ;;
     esac
 }
+resolve_name() {
+    case "$MGR:$1" in
+        *:nvim)        printf 'neovim\n' ;;       # package is neovim; command is nvim
+        apt-get:p7zip) printf 'p7zip-full\n' ;;   # Debian/Ubuntu split
+        *)             printf '%s\n' "$1" ;;
+    esac
+}
+pkg_exists() {
+    case "$MGR" in
+        apt-get)      apt-cache show "$1" >/dev/null 2>&1 ;;
+        dnf|dnf5|yum) "$MGR" -q info "$1" >/dev/null 2>&1 ;;
+        zypper)       zypper --non-interactive -q se -x "$1" >/dev/null 2>&1 ;;
+        pacman)       pacman -Si "$1" >/dev/null 2>&1 ;;
+        apk)          [ -n "$(apk search -e "$1" 2>/dev/null)" ] ;;
+        emerge)       emerge -pq "$1" >/dev/null 2>&1 ;;
+        xbps-install) xbps-query -R "$1" >/dev/null 2>&1 ;;
+        *)            return 0 ;;   # unknown manager
+    esac
+}
+detect_family() {
+    case "$MGR" in
+        pacman)       printf 'arch\n' ;;
+        apk)          printf 'alpine\n' ;;
+        xbps-install) printf 'void\n' ;;
+        emerge)       printf 'gentoo\n' ;;
+        zypper)       printf 'opensuse\n' ;;
+        apt-get|dnf|dnf5|yum) _family_from_os_release ;;
+        *)            printf '\n' ;;
+    esac
+}
+_family_from_os_release() {
+    local id=""
+    [ -r /etc/os-release ] && id=$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"' | head -n1)
+    case "$id" in
+        ubuntu|linuxmint|pop|elementary|neon|zorin) printf 'ubuntu\n' ;;
+        debian|raspbian|devuan|kali|mx)             printf 'debian\n' ;;
+        fedora)                                      printf 'fedora\n' ;;
+        rhel|centos|rocky|almalinux|ol|amzn)         printf 'centos\n' ;;
+        *)                                           printf '%s\n' "$id" ;;
+    esac
+}
+_http_get() {
+    local ua
+    ua="dotfiles-et-al installer (+https://github.com/Obbaron)"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --max-time 10 -A "$ua" "$1"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- --timeout=10 -U "$ua" "$1"
+    else
+        return 1
+    fi
+}
+_repology_jq() {
+    local body
+    body=$(_http_get "https://repology.org/api/v1/project/$1") || return 1
+    [ -n "$body" ] || return 1
+    printf '%s' "$body" | jq -r --arg fam "$REPO_FAMILY" '
+        [ .[]
+          | select(.repo | startswith($fam))
+          | (.binname // .srcname)
+          | select(. != null)
+        ][0] // empty
+    ' 2>/dev/null
+}
+_repology_python() {
+    python3 - "$1" "$REPO_FAMILY" <<'PY' 2>/dev/null
+import json, sys, urllib.parse, urllib.request
+
+name, family = sys.argv[1], sys.argv[2]
+url = "https://repology.org/api/v1/project/" + urllib.parse.quote(name)
+try:
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "dotfiles-et-al installer (+https://github.com/Obbaron)"}
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.load(resp)
+except Exception:
+    sys.exit(2)
+# first entry whose repo matches our family; prefer the binary name
+for entry in data:
+    if entry.get("repo", "").startswith(family):
+        resolved = entry.get("binname") or entry.get("srcname")
+        if resolved:
+            print(resolved)
+            sys.exit(0)
+sys.exit(1)
+PY
+}
+repology_name() {
+    [ -n "$REPO_FAMILY" ] || return 1
+    if command -v jq >/dev/null 2>&1 \
+        && { command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; }; then
+        _repology_jq "$1"
+    elif command -v python3 >/dev/null 2>&1; then
+        _repology_python "$1"
+    else
+        return 1
+    fi
+}
+resolve_pkg() {
+    local cand rep
+    cand=$(resolve_name "$1")
+    if is_installed "$cand" || pkg_exists "$cand"; then
+        printf '%s\n' "$cand"; return 0
+    fi
+    rep=$(repology_name "$cand") || rep=""
+    if [ -n "$rep" ] && pkg_exists "$rep"; then
+        log info "repology: $cand -> $rep"
+        printf '%s\n' "$rep"; return 0
+    fi
+    return 1
+}
 
 # Manifest
 read_manifest() {
@@ -102,7 +215,7 @@ read_manifest() {
 
 
 main() {
-    local opt pkgs todo p
+    local opt pkgs todo p r unresolved
     while getopts ':hntl:f:' opt; do
         case "$opt" in
             h)  usage; exit 0 ;;
@@ -124,15 +237,23 @@ main() {
 
     MGR=$(detect_mgr) || die "no supported package manager found"
     log info "package manager: $MGR"
+    REPO_FAMILY=$(detect_family)
 
     log info "refreshing package index"
     refresh_index
 
     todo=""
+    unresolved=""
     for p in "$@"; do
-        if is_installed "$p"; then log debug "present: $p"
-        else log info "missing: $p"; todo="$todo $p"; fi
+        if r=$(resolve_pkg "$p"); then
+            [ "$r" = "$p" ] || log debug "resolved: $p -> $r"
+            if is_installed "$r"; then log debug "present: $r"
+            else log info "missing: $r"; todo="$todo $r"; fi
+        else
+            log warn "unresolved: $p"; unresolved="$unresolved $p"
+        fi
     done
+    [ -z "$unresolved" ] || die "could not resolve package(s):$unresolved (not in table, not in repos, no Repology match)"
 
     if [ -n "$todo" ]; then
         log info "installing:$todo"
