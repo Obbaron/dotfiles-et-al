@@ -63,18 +63,21 @@ desktop = [
 
 [packages.minimal]
 items = [
+  "fzf",
   "nvim",
   { name = "ripgrep", alias = "rg" },
   "which",
-  "unzip",
-  "vim"
+  "vim",
+  "tree"
 ]
 
 [packages.terminal]
 items = [
+  "bat",
+  "jq",
+  "tmux",
   "yazi",
   "fastfetch",
-  "fzf",
   "fd-find",
   "eza",
   "zoxide",
@@ -84,12 +87,32 @@ items = [
 
 [packages.dev]
 items = [
+  "direnv",
+  "just",
+  "make",
   "uv"
+]
+
+[packages.rust]
+items = [
+  "rustc"
 ]
 
 [packages.net]
 items = [
-  "wget"
+  "wget",
+  "curl",
+  "nmap"
+]
+
+[packages.docker]
+items = [
+  "docker"
+]
+
+[packages.wol]
+items = [
+  "wakeonlan"
 ]
 
 [packages.firewall]
@@ -100,7 +123,10 @@ items = [
 [packages.utils]
 items = [
   { name = "p7zip", alias = "7z" },   # canonical ≠ command
-  "tar"
+  "tar",
+  "xz",
+  "unzip",
+  "zip"
 ]
 
 
