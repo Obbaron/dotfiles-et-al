@@ -232,15 +232,15 @@ def _register_xdg_via_tool(label: str, path: Path, dry_run: bool) -> bool:
     xtype = label.upper()
     cmd = ["xdg-user-dirs-update", "--set", xtype, str(path)]
     if dry_run:
-        print(f"[configure]   xdg: would run {' '.join(cmd)}")
+        print(f"[configure] xdg: would run {' '.join(cmd)}")
         return True
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as exc:
-        print(f"[configure]   xdg: xdg-user-dirs-update failed for {xtype} "
+        print(f"[configure] xdg: xdg-user-dirs-update failed for {xtype} "
               f"(exit {exc.returncode}); falling back to user-dirs.dirs")
         return False
-    print(f"[configure]   xdg: {xtype} -> {path} (via xdg-user-dirs-update)")
+    print(f"[configure] xdg: {xtype} -> {path} (via xdg-user-dirs-update)")
     return True
 
 
@@ -252,7 +252,7 @@ def _register_xdg_via_file(label: str, path: Path, dry_run: bool) -> None:
     dirs_file = xdg_config_home() / "user-dirs.dirs"
 
     if dry_run:
-        print(f"[configure]   xdg: would set {entry} in {dirs_file}")
+        print(f"[configure] xdg: would set {entry} in {dirs_file}")
         return
 
     lines = dirs_file.read_text().splitlines() if dirs_file.exists() else []
@@ -265,7 +265,7 @@ def _register_xdg_via_file(label: str, path: Path, dry_run: bool) -> None:
 
     dirs_file.parent.mkdir(parents=True, exist_ok=True)
     dirs_file.write_text("\n".join(lines) + "\n")
-    print(f"[configure]   xdg: {key} -> {_xdg_value(path)} (via user-dirs.dirs)")
+    print(f"[configure] xdg: {key} -> {_xdg_value(path)} (via user-dirs.dirs)")
 
 
 def _apply_one_directory(module: str, item: object, dry_run: bool) -> None:
@@ -276,12 +276,12 @@ def _apply_one_directory(module: str, item: object, dry_run: bool) -> None:
         bits = _parse_mode(f"directories.{module}", mode)
 
     if dry_run:
-        print(f"[configure]   mkdir -p {path}" + (f" (mode {mode})" if mode else ""))
+        print(f"[configure] mkdir -p {path}" + (f" (mode {mode})" if mode else ""))
     else:
         path.mkdir(parents=True, exist_ok=True)
         if mode is not None:
             path.chmod(bits)
-        print(f"[configure]   dir {path}" + (f" (mode {mode})" if mode else ""))
+        print(f"[configure] dir {path}" + (f" (mode {mode})" if mode else ""))
 
     if label:
         register_xdg_user_dir(label, path, dry_run)
@@ -403,7 +403,7 @@ def _apply_one_file(module: str, item: object, dry_run: bool) -> None:
     suffix = f" (mode {mode})" if mode else ""
 
     if dry_run:
-        print(f"[configure]   {action}{suffix}")
+        print(f"[configure] {action}{suffix}")
         return
 
     if content is not None:
@@ -414,7 +414,7 @@ def _apply_one_file(module: str, item: object, dry_run: bool) -> None:
         _ensure_file(module, path)
     if bits is not None:
         path.chmod(bits)
-    print(f"[configure]   {action}{suffix}")
+    print(f"[configure] {action}{suffix}")
 
 
 def apply_files(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
@@ -436,20 +436,20 @@ def _nerd_font_url(name: str) -> str:
     return f"{NERD_FONTS_REPO}/releases/download/{NERD_FONTS_VERSION}/{name}.zip"
 
 
-def _install_font(module: str, name: str, dry_run: bool) -> None:
-    """Download the named Nerd Font's release zip and extract it into its own
-    subdir under ~/.local/share/fonts. Skips if subdir already has files."""
+def _install_font(module: str, name: str, dry_run: bool) -> bool:
+    """Download the named Nerd Font's release zip and extract it into its
+    own subdir under ~/.local/share/fonts."""
     dest = expand_path(FONTS_DIR) / name
     url = _nerd_font_url(name)
 
     if dest.is_dir() and any(dest.iterdir()):
-        print(f"[configure]   present: {dest} (skip)")
-        return
+        print(f"[configure] present: {dest} (skip)")
+        return False
     if dry_run:
-        print(f"[configure]   fetch {url} -> {dest}/")
-        return
+        print(f"[configure] fetch {url} -> {dest}/")
+        return True
 
-    print(f"[configure]   fetching {name} ({NERD_FONTS_VERSION})")
+    print(f"[configure] fetching {name} ({NERD_FONTS_VERSION})")
     fd, tmpzip = tempfile.mkstemp(prefix=f"nf-{name}-", suffix=".zip")
     try:
         with os.fdopen(fd, "wb") as out:
@@ -466,22 +466,45 @@ def _install_font(module: str, name: str, dry_run: bool) -> None:
             sys.exit(f"fonts.{module}: not a valid zip for {name}: {exc}")
     finally:
         os.unlink(tmpzip)
-    print(f"[configure]   installed {name} -> {dest}")
+    print(f"[configure] installed {name} -> {dest}")
+    return True
+
+
+def _rebuild_font_cache(dry_run: bool) -> None:
+    """Refresh the fontconfig cache so newly installed fonts are visible.
+    Best-effort: missing / failing fc-cache is a warning, not fatal."""
+    if dry_run:
+        print("[configure] would run fc-cache -f")
+        return
+    if not shutil.which("fc-cache"):
+        print("[configure] fc-cache not found; skipping cache rebuild "
+              "(fonts will be picked up on the next fontconfig refresh)")
+        return
+    try:
+        subprocess.run(["fc-cache", "-f"], check=True)
+        print("[configure] font cache rebuilt (fc-cache -f)")
+    except subprocess.CalledProcessError as exc:
+        print(f"[configure] fc-cache failed (exit {exc.returncode}); "
+              "fonts installed but cache not rebuilt")
 
 
 def apply_fonts(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
-    """Install every Nerd Font declared by the resolved fonts modules. The font
-    cache rebuild (fc-cache) is a separate commands."""
+    """Install every Nerd Font declared by the resolved fonts modules, then
+    rebuild the fontconfig cache once if anything was installed."""
     font_modules = [(step, module) for step, module in modules if step == "fonts"]
     if not font_modules:
         return
     total = sum(len(config[s][m].get("items", [])) for s, m in font_modules)
     print(f"[configure] fonts: {total} font(s) across {len(font_modules)} module(s)")
+    installed_any = False
     for step, module in font_modules:
         for item in config[step][module].get("items", []):
             if not isinstance(item, str):
                 sys.exit(f"fonts.{module}: item must be a font name string: {item!r}")
-            _install_font(module, item, dry_run)
+            if _install_font(module, item, dry_run):
+                installed_any = True
+    if installed_any:
+        _rebuild_font_cache(dry_run)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
