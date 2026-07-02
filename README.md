@@ -12,8 +12,8 @@ Personal dotfiles repo with profile-driven bootstrap script.
 
 ## Table of contents
 
-- [Requirements](#requirements)
 - [Quickstart](#quickstart)
+- [Requirements](#requirements)
 - [Architecture](#architecture)
 - [The run lifecycle](#the-run-lifecycle)
 - [The pipeline: the eight steps](#the-pipeline-the-eight-steps)
@@ -22,24 +22,9 @@ Personal dotfiles repo with profile-driven bootstrap script.
 - [Usage and recipes](#usage-and-recipes)
 - [Idempotency and safety](#idempotency-and-safety)
 - [Files](#files)
-- [Development and testing](#development-and-testing)
 - [Conventions](#conventions)
 - [Cutting a release](#cutting-a-release)
 - [Known caveats](#known-caveats)
-
----
-
-## Requirements
-
-The bootstrap script installs the first two for you when it can; the rest are
-situational.
-
-- **git ≥ 2.25**: required for cone-mode sparse checkout.
-- **Python ≥ 3.11**: required for the standard-library `tomllib` parser.
-- **Supported package manager**: one of `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
-- **Network access**: to GitHub (repo + Nerd Fonts releases) and, optionally, `repology.org` for cross-distro package-name lookups.
-- **root or `sudo`**: for system-level package installs, system services, and `sudo = true` commands. User-scope work needs neither.
-- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Known caveats](#known-caveats)).
 
 ---
 
@@ -67,6 +52,20 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 - The profile is a **positional argument** (`./bootstrap.sh desktop`), not a flag.
 - `bootstrap.sh` is the only file you fetch by hand. It clones the rest of the repo itself.
 - For another fork, point `REPO`/`REPO_URL` at it (see the [env-var table](#bootstrapsh)).
+
+---
+
+## Requirements
+
+The bootstrap script installs the first two for you when it can; the rest are
+situational.
+
+- **git ≥ 2.25**: required for cone-mode sparse checkout.
+- **Python ≥ 3.11**: required for the standard-library `tomllib` parser.
+- **Supported package manager**: one of `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
+- **Network access**: to GitHub (repo + Nerd Fonts releases) and, optionally, `repology.org` for cross-distro package-name lookups.
+- **root or `sudo`**: for system-level package installs, system services, and `sudo = true` commands. User-scope work needs neither.
+- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Known caveats](#known-caveats)).
 
 ---
 
