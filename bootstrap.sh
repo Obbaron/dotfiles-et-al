@@ -16,7 +16,7 @@
 
 set -eu
 
-REF="${REF:-v1.1.2}"
+REF="${REF:-v1.1.1}"
 REPO="${REPO:-Obbaron/dotfiles-et-al}"
 REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
 REPO_HOME="${REPO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles-et-al}"
@@ -103,12 +103,20 @@ update_repo() {
     say "updating repo @ $REF in $REPO_HOME"
     if [ -n "$DRY_RUN" ]; then
         say "+ git -C $REPO_HOME fetch --tags origin"
-        say "+ git -C $REPO_HOME checkout $REF"
+        say "+ git -C $REPO_HOME checkout [origin/]$REF"
         return 0
     fi
     git -C "$REPO_HOME" fetch --tags origin || die "git fetch failed in $REPO_HOME"
-    git -C "$REPO_HOME" -c advice.detachedHead=false checkout "$REF" \
-        || die "git checkout $REF failed (dirty tree? resolve and re-run)"
+    # A branch ref must follow the remote: checking out the local branch would
+    # pin us to whatever it pointed at last time. Detach at origin/REF instead.
+    # Tags and raw SHAs have no origin/ counterpart and check out directly.
+    if git -C "$REPO_HOME" rev-parse --verify --quiet "refs/remotes/origin/$REF" >/dev/null; then
+        git -C "$REPO_HOME" -c advice.detachedHead=false checkout --detach "origin/$REF" \
+            || die "git checkout origin/$REF failed (dirty tree? resolve and re-run)"
+    else
+        git -C "$REPO_HOME" -c advice.detachedHead=false checkout "$REF" \
+            || die "git checkout $REF failed (dirty tree? resolve and re-run)"
+    fi
 }
 
 main() {
