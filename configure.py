@@ -698,8 +698,8 @@ def _apply_one_link(module: str, item: object, dry_run: bool) -> None:
     needs_backup = dest.exists() and not dest.is_symlink()
     if dry_run:
         if needs_backup:
-            print(f"[configure]   backup {dest} -> {dest.name}.bak")
-        print(f"[configure]   link {dest} -> {src}")
+            print(f"[configure] backup {dest} -> {dest.name}.bak")
+        print(f"[configure] link {dest} -> {src}")
         return
 
     if needs_backup:
@@ -713,7 +713,7 @@ def _apply_one_link(module: str, item: object, dry_run: bool) -> None:
         sys.exit(f"links.{module}: cannot link {dest} -> {src}: {exc} "
                  "(parent dir missing? add a directories module to requires)")
     
-    print(f"[configure]   link {dest} -> {src}")
+    print(f"[configure] link {dest} -> {src}")
 
 
 def apply_links(config: dict, modules: list[tuple[str, str]], dry_run: bool) -> None:
@@ -762,7 +762,7 @@ def _run_service_action(module: str, name: str, action: str, scope: str, dry_run
         cmd = ["sudo", *cmd]
 
     if dry_run:
-        print(f"[configure]   would run: {' '.join(cmd)}")
+        print(f"[configure] would run: {' '.join(cmd)}")
         return
     try:
         subprocess.run(cmd, check=True)
@@ -770,13 +770,13 @@ def _run_service_action(module: str, name: str, action: str, scope: str, dry_run
         sys.exit(f"services.{module}: '{action} {name}' failed "
                  f"(systemctl exited {exc.returncode})")
     
-    print(f"[configure]   {action} {name} ({scope})")
+    print(f"[configure] {action} {name} ({scope})")
 
 
 def _apply_one_service(module: str, item: object, dry_run: bool) -> None:
     name, enabled, started, scope = _parse_service_item(module, item)
     if enabled is None and started is None:
-        print(f"[configure]   service {name}: nothing to do (no enabled/started)")
+        print(f"[configure] service {name}: nothing to do (no enabled/started)")
         return
     if enabled is not None:
         _run_service_action(module, name, "enable" if enabled else "disable", scope, dry_run)
@@ -843,7 +843,7 @@ def _apply_one_command(module: str, item: object, dry_run: bool) -> None:
 
     if dry_run:
         if creates is not None and expand_path(creates).exists():
-            print(f"[configure]   would skip: {label} (creates exists)")
+            print(f"[configure] would skip: {label} (creates exists)")
             return
         
         argv = _shell_argv(module, run, sudo, dry_run=True)
@@ -863,17 +863,17 @@ def _apply_one_command(module: str, item: object, dry_run: bool) -> None:
         sys.exit(f"commands.{module}: cwd does not exist: {workdir}")
     
     if creates is not None and expand_path(creates).exists():
-        print(f"[configure]   skip: {label} (creates exists: {expand_path(creates)})")
+        print(f"[configure] skip: {label} (creates exists: {expand_path(creates)})")
         return
     
     if unless is not None:
         guard = _shell_argv(module, unless, sudo, dry_run=False)
         if subprocess.run(guard, cwd=workdir, check=False).returncode == 0:
-            print(f"[configure]   skip: {label} (unless satisfied)")
+            print(f"[configure] skip: {label} (unless satisfied)")
             return
 
     argv = _shell_argv(module, run, sudo, dry_run=False)
-    print(f"[configure]   run: {label}")
+    print(f"[configure] run: {label}")
     
     try:
         subprocess.run(argv, cwd=workdir, check=True)
