@@ -31,9 +31,10 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
   && ./bootstrap.sh <profile>
 ```
 
-- The profile is a **positional argument** (`./bootstrap.sh desktop`), not a flag.
-- `bootstrap.sh` is the only file you fetch by hand. It clones the rest of the repo itself.
-- For another fork, point `REPO`/`REPO_URL` at it (see the [env-var table](#bootstrapsh)).
+#### Notes
+- Profile is positional: ./bootstrap.sh desktop (not a flag)
+- bootstrap.sh is the only file you manually download
+- Forking? Override REPO or REPO_URL, and create a release + tag **v1.0.0** 
 
 ---
 
@@ -56,15 +57,14 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 
 ## Requirements
 
-The bootstrap script installs the first two for you when it can; the rest are
-situational.
+The bootstrap script installs the first two for you when it can; the rest are situational.
 
-- **git ≥ 2.25**: required for cone-mode sparse checkout.
-- **Python ≥ 3.11**: required for the standard-library `tomllib` parser.
-- **Supported package manager**: one of `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
-- **Network access**: to GitHub (repo + Nerd Fonts releases) and, optionally, `repology.org` for cross-distro package-name lookups.
+- **git ≥ 2.25**: required for cone-mode sparse checkout
+- **Python ≥ 3.11**: required for the standard-library `tomllib` parser
+- **Supported package manager**: `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
+- **Network access**: to GitHub (repo + Nerd Fonts) and optionally `repology.org` for cross-distro package name lookups
 - **root or `sudo`**: for system-level package installs, system services, and `sudo = true` commands. User-scope work needs neither.
-- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Fine print](#known-caveats)).
+- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Fine print](#fine_print)).
 
 ---
 
@@ -91,20 +91,20 @@ bootstrap.sh ──► configure.py ──► install-pkg.sh
 
 ## Run lifecycle
 
-What actually happens, end to end, when you run `./bootstrap.sh desktop`.
+End-to-end when you run `./bootstrap.sh <profile>`.
 
 ### `bootstrap.sh`
 
 1. **Ensure dependencies.**
-   - Checks `git --version` against the 2.25 minimum and probes for a Python ≥ 3.11 interpreter.
-   - Installs whatever is missing via the detected package manager (using `sudo` when not root).
-   - Re-checks afterward and fails if the versions are still too old.
+   - Checks `git --version` against the 2.25 minimum and probes for a Python ≥ 3.11 interpreter
+   - Installs whatever is missing via the detected package manager (using `sudo` when not root)
+   - Checks agains and fails if the versions are still too old
 2. **Obtain the repo at `REF`, into `REPO_HOME`.**
-   - **First run:** `git clone --branch <REF> --sparse` - a cone-mode sparse checkout of the **root files only** (`configure.py`, `config.toml`, `install-pkg.sh`).
-   - **Re-run:** `git fetch --tags origin` followed by a non-forced `checkout <REF>`.
-   - If `REPO_HOME` exists but is not a git repo, it refuses rather than overwrite.
+   - **First run:** `git clone --branch <REF> --sparse` - a cone-mode sparse checkout of **root files only** (`configure.py`, `config.toml`, `install-pkg.sh`)
+   - **Re-run:** `git fetch --tags origin` followed by a non-forced `checkout <REF>`
+   - If `REPO_HOME` exists but is not a git repo, refuses rather than overwrite
 3. **Hand off.**
-   - `exec configure.py`, passing your arguments straight through.
+   - `exec configure.py <profile>`, passing the arguments straight through to python
 
 **Environment variables**
 
@@ -127,8 +127,8 @@ values), then:
    - *missing or empty* → seed it
    - *present and valid* → leave it untouched
    - *present but broken* → refuse (no clobber)
-3. **Resolves the profile** to an ordered list of `(step, module)` pairs (see [profile resolution](#profile-resolution)).
-4. **Applies each step in pipeline order** (see [the eight steps](#the-pipeline-the-eight-steps)).
+3. **Resolves the profile** to an ordered list of `(step, module)` pairs (see [profile resolution](#profile-resolution))
+4. **Applies each step in pipeline order** (see [the eight steps](#pipeline))
 
 **Argument / environment summary**
 
