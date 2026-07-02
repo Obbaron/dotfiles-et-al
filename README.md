@@ -39,7 +39,6 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 
 ## Table of contents
 
-- [Quickstart](#quickstart)
 - [Requirements](#requirements)
 - [Architecture](#architecture)
 - [The run lifecycle](#the-run-lifecycle)
