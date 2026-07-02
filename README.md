@@ -2,11 +2,11 @@
 
 Personal dotfiles and the increasingly questionable decisions required to recreate my preferred environment.
 
-**Cross-distro**: One config; many package managers.
-**Declarative**: Describe the end state.
-**Idempotent**: Paranoia is a feature.
-**Previewable**: Regret is cheaper in dry-run mode.
-**Pinned**: Tagged versions stay still.
+- **Cross-distro**: One config; many package managers.
+- **Declarative**: Describe the end state.
+- **Idempotent**: Paranoia is a feature.
+- **Previewable**: Regret is cheaper in dry-run mode.
+- **Pinned**: Tagged versions stay still.
 
 ---
 
