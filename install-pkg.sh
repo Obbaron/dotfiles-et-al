@@ -61,7 +61,7 @@ run_priv() {
 refresh_index() {
     case "$MGR" in
         apt-get)      run_priv apt-get update ;;
-        dnf|dnf5|yum) run_priv "$MGR" makecache ;;
+        dnf|dnf5|yum) run_priv "$MGR" -y makecache ;;
         pacman)       run_priv pacman -Sy ;;
         zypper)       run_priv zypper refresh ;;
         apk)          run_priv apk update ;;
@@ -90,11 +90,18 @@ is_installed() {
         xbps-install)        xbps-query "$1" >/dev/null 2>&1 ;;
     esac
 }
+# Map a friendly/canonical tool name to the actual package name for the current
+# manager. Only names that DIVERGE from the package name are listed here; anything
+# else passes through unchanged and is validated downstream by pkg_exists, with
+# Repology as the final fallback. Notes: apt-get covers Debian and Ubuntu;
+# dnf/dnf5/yum share RPM package names; an unmatched inner case leaves the name
+# as-is (identity) so partial coverage is still safe.
 resolve_name() {
     local name="$1"
     case "$1" in
         # editors
         nvim) name=neovim ;;
+        vim)  case "$MGR" in dnf|dnf5|yum) name=vim-enhanced ;; esac ;;
 
         # archives / compression
         p7zip) case "$MGR" in apt-get) name=p7zip-full ;; esac ;;
@@ -172,7 +179,7 @@ resolve_name() {
 pkg_exists() {
     case "$MGR" in
         apt-get)      apt-cache show "$1" >/dev/null 2>&1 ;;
-        dnf|dnf5|yum) "$MGR" -q info "$1" >/dev/null 2>&1 ;;
+        dnf|dnf5|yum) "$MGR" -y -q info "$1" </dev/null >/dev/null 2>&1 ;;
         zypper)       zypper --non-interactive -q se -x "$1" >/dev/null 2>&1 ;;
         pacman)       pacman -Si "$1" >/dev/null 2>&1 ;;
         apk)          [ -n "$(apk search -e "$1" 2>/dev/null)" ] ;;
@@ -316,6 +323,7 @@ main() {
     log info "refreshing package index"
     refresh_index
 
+    log info "resolving $# package(s) (-l debug for detail)"
     todo=""
     unresolved=""
     for p in "$@"; do
