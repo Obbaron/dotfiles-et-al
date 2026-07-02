@@ -16,7 +16,7 @@
 
 set -eu
 
-REF="${REF:-v1.1.3}"
+REF="${REF:-v1.0.0}"
 REPO="${REPO:-Obbaron/dotfiles-et-al}"
 REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
 REPO_HOME="${REPO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles-et-al}"
