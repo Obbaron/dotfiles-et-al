@@ -1,12 +1,12 @@
 # dotfiles-et-al
 
-Personal dotfiles repo with profile-driven bootstrap script.
+Personal dotfiles and the increasingly questionable decisions required to recreate my preferred environment.
 
-- **Cross-distro:** one config, many package managers (apt, dnf, pacman, zypper, apk, emerge, xbps).
-- **Declarative:** profiles compose reusable modules (packages, dirs, git repos, files, fonts, links, services, commands).
-- **Idempotent:** safe to re-run; existing work is detected and skipped, real files are backed up rather than clobbered.
-- **Previewable:** every layer supports a dry run that changes nothing.
-- **Pinned:** the repo is fetched at a specific git tag, so a profile resolves the same way over time.
+**Cross-distro**: One config; many package managers.
+**Declarative**: Describe the end state.
+**Idempotent**: Paranoia is a feature.
+**Previewable**: Regret is cheaper in dry-run mode.
+**Pinned**: Tagged versions stay still.
 
 ---
 
@@ -24,7 +24,7 @@ Personal dotfiles repo with profile-driven bootstrap script.
 - [Files](#files)
 - [Conventions](#conventions)
 - [Cutting a release](#cutting-a-release)
-- [Known caveats](#known-caveats)
+- [Fine print](#known-caveats)
 
 ---
 
@@ -65,7 +65,7 @@ situational.
 - **Supported package manager**: one of `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
 - **Network access**: to GitHub (repo + Nerd Fonts releases) and, optionally, `repology.org` for cross-distro package-name lookups.
 - **root or `sudo`**: for system-level package installs, system services, and `sudo = true` commands. User-scope work needs neither.
-- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Known caveats](#known-caveats)).
+- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Fine print](#known-caveats)).
 
 ---
 
@@ -218,7 +218,7 @@ entries. This makes those tool directories available before the `files` and
 
 ### 8. `commands`
 
-- **Purpose:** run arbitrary shell commands, with optional idempotency guards.
+- **Purpose:** do whatever wasn't important enough to deserve its own first-class abstraction.
 - **Fields:** `{ run, desc, cwd, creates, unless, sudo }`.
   - `run`: the command (executed via `sh -c`, so pipes and redirects work).
   - `desc`: a human-readable label for logs.
@@ -390,8 +390,7 @@ The whole pipeline is designed to be re-run safely:
 - **Commands:** `creates`/`unless` guards make guarded commands no-ops once satisfied.
 - **Config:** a valid per-machine config is never overwritten; a broken one is refused, not clobbered.
 
-The guiding rule throughout: **never silently destroy user data, and never
-silently ignore an error.**
+The governing principle is simple: **Never silently destroy user data. Never silently ignore failure. If something looks dangerous, stop and complain instead.**
 
 ---
 
@@ -423,9 +422,10 @@ silently ignore an error.**
 
 ---
 
-## Known caveats
+## Fine print
 
-- **Fork or different forge:** the repo (`Obbaron/dotfiles-et-al`) matches the on-disk checkout name. Using your own copy? Set `REPO`/`REPO_URL` and adjust the Quickstart URLs.
-- **systemd only:** the `services` step uses `systemctl`. On a non-systemd host, a profile that declares services fails fast by design. Drop the services module or run on a systemd host.
-- **Network:** the `fonts` step downloads from GitHub releases, and Repology lookups need `repology.org`. Behind a strict firewall, expect those to fail; package resolution still works for names in the built-in table or the local repos.
-- **`sudo` prompts:** system-scope services, system package installs, and `sudo = true` commands may prompt for a password when not run as root.
+- **systemd only**: if you ask it to manage services on a non-systemd machine, it declines to engage in creative interpretation.
+- **Network access**: assumes GitHub and Repology exist; firewall disagreement may render some features theoretical.
+- **sudo**: occasionally required. This is less a design choice than an operating-system tradition.
+
+This repository does not attempt to solve the general dotfiles problem. Rather it solves a much narrower problem: recreating _my_ particular environment that may or may not have been a good idea in the first place.
