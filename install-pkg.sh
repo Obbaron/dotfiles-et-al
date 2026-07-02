@@ -90,12 +90,6 @@ is_installed() {
         xbps-install)        xbps-query "$1" >/dev/null 2>&1 ;;
     esac
 }
-# Map a friendly/canonical tool name to the actual package name for the current
-# manager. Only names that DIVERGE from the package name are listed here; anything
-# else passes through unchanged and is validated downstream by pkg_exists, with
-# Repology as the final fallback. Notes: apt-get covers Debian and Ubuntu;
-# dnf/dnf5/yum share RPM package names; an unmatched inner case leaves the name
-# as-is (identity) so partial coverage is still safe.
 resolve_name() {
     local name="$1"
     case "$1" in
@@ -112,13 +106,6 @@ resolve_name() {
             case "$MGR" in
                 apt-get|dnf|dnf5|yum) name=fd-find ;;
                 *)                    name=fd ;;
-            esac ;;
-
-        # crypto
-        gpg|gnupg)
-            case "$MGR" in
-                dnf|dnf5|yum) name=gnupg2 ;;
-                *)            name=gnupg ;;
             esac ;;
 
         # build toolchain
