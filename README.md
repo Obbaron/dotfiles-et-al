@@ -10,24 +10,6 @@ Personal dotfiles and the increasingly questionable decisions required to recrea
 
 ---
 
-## Table of contents
-
-- [Quickstart](#quickstart)
-- [Requirements](#requirements)
-- [Architecture](#architecture)
-- [The run lifecycle](#the-run-lifecycle)
-- [The pipeline: the eight steps](#the-pipeline-the-eight-steps)
-- [`config.toml` reference](#configtoml-reference)
-- [Package-name resolution](#package-name-resolution)
-- [Usage and recipes](#usage-and-recipes)
-- [Idempotency and safety](#idempotency-and-safety)
-- [Files](#files)
-- [Conventions](#conventions)
-- [Cutting a release](#cutting-a-release)
-- [Fine print](#known-caveats)
-
----
-
 ## Quickstart
 
 Fetch `bootstrap.sh` and run it with a profile. Replace `<profile>` with
@@ -52,6 +34,24 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 - The profile is a **positional argument** (`./bootstrap.sh desktop`), not a flag.
 - `bootstrap.sh` is the only file you fetch by hand. It clones the rest of the repo itself.
 - For another fork, point `REPO`/`REPO_URL` at it (see the [env-var table](#bootstrapsh)).
+
+---
+
+## Table of contents
+
+- [Quickstart](#quickstart)
+- [Requirements](#requirements)
+- [Architecture](#architecture)
+- [The run lifecycle](#the-run-lifecycle)
+- [The pipeline: the eight steps](#the-pipeline-the-eight-steps)
+- [`config.toml` reference](#configtoml-reference)
+- [Package-name resolution](#package-name-resolution)
+- [Usage and recipes](#usage-and-recipes)
+- [Idempotency and safety](#idempotency-and-safety)
+- [Files](#files)
+- [Conventions](#conventions)
+- [Cutting a release](#cutting-a-release)
+- [Fine print](#known-caveats)
 
 ---
 
