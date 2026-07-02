@@ -41,8 +41,8 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 
 - [Requirements](#requirements)
 - [Architecture](#architecture)
-- [The run lifecycle](#the-run-lifecycle)
-- [The pipeline: the eight steps](#the-pipeline-the-eight-steps)
+- [Run lifecycle](#run-lifecycle)
+- [Pipeline](#pipeline)
 - [`config.toml` reference](#configtoml-reference)
 - [Package-name resolution](#package-name-resolution)
 - [Usage and recipes](#usage-and-recipes)
@@ -148,7 +148,7 @@ ones that are missing. It is also a standalone tool (see
 
 ---
 
-## The pipeline: the eight steps
+## Piepline
 
 Steps always run in this fixed order, regardless of how a profile lists them:
 
