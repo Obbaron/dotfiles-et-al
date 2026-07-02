@@ -1,269 +1,159 @@
 #!/bin/sh
-# install-pkg.sh
+# bootstrap.sh
+#   1. ensures dependencies: git >= 2.25 and python >= 3.11
+#   2. obtains the repo at REF ($REPO_HOME, under XDG data):
+#      first run sparse-clones (root level only); a re-run fetches + checks out REF
+#   3. hands off to configure.py passing through the user's args
+#
+# Usage:
+#   ./bootstrap.sh <profile> [ARGS...]   ARGS pass through to configure.py
+# Config:
+#   REF        git tag (or ref) to clone/checkout
+#   REPO       owner/name
+#   REPO_URL   git clone URL
+#   REPO_HOME  repo destination
+#   DRY_RUN    report actions but change nothing
+
 set -eu
 
-usage() {
-    cat <<USAGE
-Usage: install-pkg.sh [-h] [-n] [-t] [-l LEVEL] [-f MANIFEST] [PACKAGE...]
+REF="${REF:-v1.0.0}"
+REPO="${REPO:-Obbaron/dotfiles-et-al}"
+REPO_URL="${REPO_URL:-https://github.com/$REPO.git}"
+REPO_HOME="${REPO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles-et-al}"
+MIN_PY_MAJOR=3
+MIN_PY_MINOR=11
+MIN_GIT_MAJOR=2
+MIN_GIT_MINOR=25
+DRY_RUN="${DRY_RUN:-}"
 
-  -h            show help
-  -n            dry run: print commands instead of running them
-  -t            prefix log lines with UTC timestamp
-  -l LEVEL      log level: debug|info|warn|error (default: info)
-  -f MANIFEST   read package names from MANIFEST (one per line; # = comment)
-  PACKAGE...    packages to install, in addition to any manifest
-USAGE
-}
+say() { printf '[bootstrap] %s\n' "$*" >&2; }
+die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
 
-DRY_RUN=""
-TIMESTAMP=""
-MANIFEST=""
-LEVEL=info
-MGR=""
-REPO_FAMILY=""
-ESC=$(printf '\033')
-
-
-# Logging
-_rank() { case "$1" in debug) echo 0 ;; info) echo 1 ;; warn) echo 2 ;; error) echo 3 ;; *) echo 1 ;; esac; }
-log() {
-    local lvl="$1"; shift
-    [ "$(_rank "$lvl")" -ge "$(_rank "$LEVEL")" ] || return 0
-    local ts="" color="" reset=""
-    [ -n "$TIMESTAMP" ] && ts="$(date -u +%Y-%m-%dT%H:%M:%SZ) "
-    if [ -z "${NO_COLOR:-}" ] && [ -t 2 ]; then
-        case "$lvl" in
-            debug) color="${ESC}[2m"  ;;
-            info)  color="${ESC}[36m" ;;
-            warn)  color="${ESC}[33m" ;;
-            error) color="${ESC}[31m" ;;
-        esac
-        reset="${ESC}[0m"
-    fi
-    printf '%s%s%-5s%s %s\n' "$ts" "$color" "$lvl" "$reset" "$*" >&2
-}
-die() { log error "$*"; exit 1; }
-
-# Packages
-detect_mgr() {
-    local mgr
-    for mgr in apt-get dnf dnf5 yum pacman zypper apk emerge xbps-install; do
-        command -v "$mgr" >/dev/null 2>&1 && { printf '%s\n' "$mgr"; return 0; }
-    done
-    return 1
-}
 run_priv() {
-    if [ -n "$DRY_RUN" ]; then printf '+ %s\n' "$*" >&2; return 0; fi
+    if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
     if [ "$(id -u)" -eq 0 ]; then "$@"
     elif command -v sudo >/dev/null 2>&1; then sudo "$@"
     else die "need root or sudo to run: $*"; fi
 }
-refresh_index() {
-    case "$MGR" in
-        apt-get)      run_priv apt-get update ;;
-        dnf|dnf5|yum) run_priv "$MGR" makecache ;;
-        pacman)       run_priv pacman -Sy ;;
-        zypper)       run_priv zypper refresh ;;
-        apk)          run_priv apk update ;;
-        emerge)       run_priv emerge --sync ;;
-        xbps-install) run_priv xbps-install -S ;;
-    esac
-}
-install_pkgs() {
-    case "$MGR" in
-        apt-get)      run_priv env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" ;;
-        dnf|dnf5|yum) run_priv "$MGR" install -y "$@" ;;
-        pacman)       run_priv pacman -S --noconfirm "$@" ;;
-        zypper)       run_priv zypper --non-interactive install "$@" ;;
-        apk)          run_priv apk add "$@" ;;
-        emerge)       run_priv emerge "$@" ;;
-        xbps-install) run_priv xbps-install -y "$@" ;;
-    esac
-}
-is_installed() {
-    case "$MGR" in
-        apt-get)             dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'ok installed' ;;
-        dnf|dnf5|yum|zypper) rpm -q "$1" >/dev/null 2>&1 ;;
-        pacman)              pacman -Q "$1" >/dev/null 2>&1 ;;
-        apk)                 apk info -e "$1" >/dev/null 2>&1 ;;
-        emerge)              qlist -I -C "$1" >/dev/null 2>&1 ;;
-        xbps-install)        xbps-query "$1" >/dev/null 2>&1 ;;
-    esac
-}
-resolve_name() {
-    case "$MGR:$1" in
-        *:nvim)        printf 'neovim\n' ;;       # package is neovim; command is nvim
-        apt-get:p7zip) printf 'p7zip-full\n' ;;   # Debian/Ubuntu split
-        *)             printf '%s\n' "$1" ;;
-    esac
-}
-pkg_exists() {
-    case "$MGR" in
-        apt-get)      apt-cache show "$1" >/dev/null 2>&1 ;;
-        dnf|dnf5|yum) "$MGR" -q info "$1" >/dev/null 2>&1 ;;
-        zypper)       zypper --non-interactive -q se -x "$1" >/dev/null 2>&1 ;;
-        pacman)       pacman -Si "$1" >/dev/null 2>&1 ;;
-        apk)          [ -n "$(apk search -e "$1" 2>/dev/null)" ] ;;
-        emerge)       emerge -pq "$1" >/dev/null 2>&1 ;;
-        xbps-install) xbps-query -R "$1" >/dev/null 2>&1 ;;
-        *)            return 0 ;;   # unknown manager
-    esac
-}
-detect_family() {
-    case "$MGR" in
-        pacman)       printf 'arch\n' ;;
-        apk)          printf 'alpine\n' ;;
-        xbps-install) printf 'void\n' ;;
-        emerge)       printf 'gentoo\n' ;;
-        zypper)       printf 'opensuse\n' ;;
-        apt-get|dnf|dnf5|yum) _family_from_os_release ;;
-        *)            printf '\n' ;;
-    esac
-}
-_family_from_os_release() {
-    local id=""
-    [ -r /etc/os-release ] && id=$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"' | head -n1)
-    case "$id" in
-        ubuntu|linuxmint|pop|elementary|neon|zorin) printf 'ubuntu\n' ;;
-        debian|raspbian|devuan|kali|mx)             printf 'debian\n' ;;
-        fedora)                                     printf 'fedora\n' ;;
-        rhel|centos|rocky|almalinux|ol|amzn)        printf 'centos\n' ;;
-        *)                                          printf '%s\n' "$id" ;;
-    esac
-}
-_http_get() {
-    local ua
-    ua="dotfiles-et-al installer (+https://github.com/Obbaron)"
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --max-time 10 -A "$ua" "$1"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO- --timeout=10 -U "$ua" "$1"
-    else
-        return 1
-    fi
-}
-_repology_jq() {
-    local body
-    body=$(_http_get "https://repology.org/api/v1/project/$1") || return 1
-    [ -n "$body" ] || return 1
-    printf '%s' "$body" | jq -r --arg fam "$REPO_FAMILY" '
-        [ .[]
-          | select(.repo | startswith($fam))
-          | (.binname // .srcname)
-          | select(. != null)
-        ][0] // empty
-    ' 2>/dev/null
-}
-_repology_python() {
-    python3 - "$1" "$REPO_FAMILY" <<'PY' 2>/dev/null
-import json, sys, urllib.parse, urllib.request
 
-name, family = sys.argv[1], sys.argv[2]
-url = "https://repology.org/api/v1/project/" + urllib.parse.quote(name)
-try:
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "dotfiles-et-al installer (+https://github.com/Obbaron)"}
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.load(resp)
-except Exception:
-    sys.exit(2)
-# first entry whose repo matches our family; prefer the binary name
-for entry in data:
-    if entry.get("repo", "").startswith(family):
-        resolved = entry.get("binname") or entry.get("srcname")
-        if resolved:
-            print(resolved)
-            sys.exit(0)
-sys.exit(1)
-PY
-}
-repology_name() {
-    [ -n "$REPO_FAMILY" ] || return 1
-    if command -v jq >/dev/null 2>&1 \
-        && { command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; }; then
-        _repology_jq "$1"
-    elif command -v python3 >/dev/null 2>&1; then
-        _repology_python "$1"
-    else
-        return 1
-    fi
-}
-resolve_pkg() {
-    local cand rep
-    cand=$(resolve_name "$1")
-    if is_installed "$cand" || pkg_exists "$cand"; then
-        printf '%s\n' "$cand"; return 0
-    fi
-    rep=$(repology_name "$cand") || rep=""
-    if [ -n "$rep" ] && pkg_exists "$rep"; then
-        log info "repology: $cand -> $rep"
-        printf '%s\n' "$rep"; return 0
-    fi
+detect_pkg_mgr() {
+    local pm
+    for pm in apt-get dnf dnf5 yum pacman zypper apk emerge xbps-install; do
+        command -v "$pm" >/dev/null 2>&1 && { printf '%s\n' "$pm"; return 0; }
+    done
     return 1
 }
 
-# Manifest
-read_manifest() {
-    [ -r "$1" ] || die "cannot read manifest: $1"
-    while IFS= read -r line || [ -n "$line" ]; do
-        line=${line#"${line%%[![:space:]]*}"}   # trim leading whitespace
-        line=${line%"${line##*[![:space:]]}"}   # trim trailing whitespace
-        case "$line" in ''|\#*) continue ;; esac
-        printf '%s\n' "$line"
-    done < "$1"
-    return 0
+install_pkgs() {
+    [ "$#" -ge 1 ] || return 0
+    local mgr
+    mgr=$(detect_pkg_mgr) || die "no supported package manager found"
+    say "installing via $mgr: $*"
+    case "$mgr" in
+        apt-get)
+            run_priv env DEBIAN_FRONTEND=noninteractive apt-get update
+            run_priv env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" ;;
+        dnf|dnf5|yum) run_priv "$mgr" install -y "$@" ;;
+        pacman)       run_priv pacman -Sy --noconfirm "$@" ;;
+        zypper)       run_priv zypper --non-interactive install "$@" ;;
+        apk)          run_priv apk add "$@" ;;
+        emerge)       run_priv emerge "$@" ;;
+        xbps-install) run_priv xbps-install -Sy "$@" ;;
+        *)            die "unsupported manager: $mgr" ;;
+    esac
 }
 
-
-main() {
-    local opt pkgs todo p r unresolved
-    while getopts ':hntl:f:' opt; do
-        case "$opt" in
-            h)  usage; exit 0 ;;
-            n)  DRY_RUN=1 ;;
-            t)  TIMESTAMP=1 ;;
-            f)  MANIFEST=$OPTARG ;;
-            l)  case "$OPTARG" in debug|info|warn|error) LEVEL=$OPTARG ;; *) die "invalid log level: $OPTARG" ;; esac ;;
-            :)  usage >&2; die "option -$OPTARG requires an argument" ;;
-            \?) usage >&2; die "invalid option -$OPTARG" ;;
-        esac
-    done
-    shift $((OPTIND - 1))
-
-    pkgs=""
-    [ -z "$MANIFEST" ] || pkgs=$(read_manifest "$MANIFEST")
-    # shellcheck disable=SC2086
-    set -- $pkgs "$@"
-    [ "$#" -ge 1 ] || die "no packages specified (use -f MANIFEST or name packages)"
-
-    MGR=$(detect_mgr) || die "no supported package manager found"
-    log info "package manager: $MGR"
-    REPO_FAMILY=$(detect_family)
-
-    log info "refreshing package index"
-    refresh_index
-
-    todo=""
-    unresolved=""
-    for p in "$@"; do
-        if r=$(resolve_pkg "$p"); then
-            [ "$r" = "$p" ] || log debug "resolved: $p -> $r"
-            if is_installed "$r"; then log debug "present: $r"
-            else log info "missing: $r"; todo="$todo $r"; fi
-        else
-            log warn "unresolved: $p"; unresolved="$unresolved $p"
+find_python() {
+    local py
+    for py in python3.13 python3.12 python3.11 python3 python; do
+        command -v "$py" >/dev/null 2>&1 || continue
+        if "$py" -c "import sys; sys.exit(0 if sys.version_info >= ($MIN_PY_MAJOR, $MIN_PY_MINOR) else 1)" 2>/dev/null; then
+            command -v "$py"
+            return 0
         fi
     done
-    [ -z "$unresolved" ] || die "could not resolve package(s):$unresolved (not in table, not in repos, no Repology match)"
-
-    if [ -n "$todo" ]; then
-        log info "installing:$todo"
-        # shellcheck disable=SC2086
-        install_pkgs $todo
-        log info "done"
-    else
-        log info "all packages already present"
-    fi
+    return 1
 }
+
+git_ok() {
+    command -v git >/dev/null 2>&1 || return 1
+    local v major minor
+    v=$(git --version 2>/dev/null) || return 1
+    v=${v#git version }                  # "2.39.3" / "2.39.3 (Apple Git-145)"
+    major=${v%%.*}                       # "2"
+    minor=${v#*.}; minor=${minor%%.*}    # "39"
+    case "$major" in ''|*[!0-9]*) return 1 ;; esac
+    case "$minor" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$major" -gt "$MIN_GIT_MAJOR" ] && return 0
+    [ "$major" -eq "$MIN_GIT_MAJOR" ] && [ "$minor" -ge "$MIN_GIT_MINOR" ]
+}
+
+clone_repo() {
+    say "cloning $REPO_URL @ $REF -> $REPO_HOME"
+    if [ -n "$DRY_RUN" ]; then
+        say "+ git -c advice.detachedHead=false clone --branch $REF --sparse $REPO_URL $REPO_HOME"
+        return 0
+    fi
+    mkdir -p "$(dirname -- "$REPO_HOME")" || die "cannot create parent of $REPO_HOME"
+    git -c advice.detachedHead=false clone --branch "$REF" --sparse "$REPO_URL" "$REPO_HOME" \
+        || die "git clone failed (check REF=$REF / REPO_URL=$REPO_URL)"
+}
+
+update_repo() {
+    say "updating repo @ $REF in $REPO_HOME"
+    if [ -n "$DRY_RUN" ]; then
+        say "+ git -C $REPO_HOME fetch --tags origin"
+        say "+ git -C $REPO_HOME checkout $REF"
+        return 0
+    fi
+    git -C "$REPO_HOME" fetch --tags origin || die "git fetch failed in $REPO_HOME"
+    git -C "$REPO_HOME" -c advice.detachedHead=false checkout "$REF" \
+        || die "git checkout $REF failed (dirty tree? resolve and re-run)"
+}
+
+main() {
+    local need py
+
+    need=""
+    if git_ok; then
+        say "git ok: $(git --version)"
+    else
+        say "git missing or < $MIN_GIT_MAJOR.$MIN_GIT_MINOR; will install git"
+        need="$need git"
+    fi
+    py=""
+    if py=$(find_python); then
+        say "python ok: $py ($("$py" --version 2>&1))"
+    else
+        say "no python >= $MIN_PY_MAJOR.$MIN_PY_MINOR found; will install python3"
+        need="$need python3"
+    fi
+
+    # shellcheck disable=SC2086
+    [ -z "$need" ] || install_pkgs $need
+
+    if [ -z "$DRY_RUN" ]; then
+        git_ok || die "git >= $MIN_GIT_MAJOR.$MIN_GIT_MINOR still unavailable after install; install a newer git and re-run"
+        if [ -z "$py" ]; then
+            py=$(find_python) || die "python >= $MIN_PY_MAJOR.$MIN_PY_MINOR still unavailable after installing python3; install a newer Python (backport/PPA) and re-run"
+            say "python ok: $py ($("$py" --version 2>&1))"
+        fi
+    fi
+
+    if [ -d "$REPO_HOME/.git" ]; then
+        update_repo
+    elif [ -e "$REPO_HOME" ]; then
+        die "$REPO_HOME exists but is not a git repo; remove it and re-run"
+    else
+        clone_repo
+    fi
+
+    if [ -n "$DRY_RUN" ]; then
+        say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
+        return 0
+    fi
+    say "exec configure.py"
+    exec "$py" "$REPO_HOME/configure.py" "$@"
+}
+
 main "$@"
