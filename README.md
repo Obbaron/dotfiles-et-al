@@ -1,9 +1,9 @@
 # dotfiles-et-al
 
-Personal dotfiles and the increasingly questionable decisions required to recreate my preferred environment.
+Personal dotfiles and unnecesarily complicated bootstrap system.
 
 - **Cross-distro**: One config; many package managers.
-- **Declarative**: Describe the end state.
+- **Declarative**: It _is_ about the destination; NOT the journey
 - **Idempotent**: Paranoia is a feature.
 - **Previewable**: Regret is cheaper in dry-run mode.
 - **Pinned**: Tagged versions stay still.
@@ -32,9 +32,9 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 ```
 
 #### Notes
-- Profile is positional: ./bootstrap.sh desktop (not a flag)
+- Profile is positional: `./bootstrap.sh desktop` (not a flag)
 - bootstrap.sh is the only file you manually download
-- Forking? Override REPO or REPO_URL, and create a release + tag **v1.0.0** 
+- Forking? Override REPO or REPO_URL, cut a release, and tag it **v1.0.0**
 
 ---
 
