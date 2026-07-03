@@ -128,7 +128,7 @@ values), then:
    - *present and valid* → leave it untouched
    - *present but broken* → refuse (no clobber)
 3. **Resolves the profile** to an ordered list of `(step, module)` pairs (see [profile resolution](#profile-resolution))
-4. **Applies each step in pipeline order** (see [the eight steps](#pipeline))
+4. **Applies each step in pipeline order** (see [pipeline](#pipeline))
 
 **Argument / environment summary**
 
