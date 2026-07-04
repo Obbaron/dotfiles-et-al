@@ -71,8 +71,12 @@ The bootstrap script installs the first two for you when it can; the rest are si
 ## Architecture
 
 ```
-bootstrap.sh ──► configure.py ──► install-pkg.sh
-  (shell)          (python)          (shell)
+               install-pkg.sh
+                  (shell)
+                     ▲
+                     |
+bootstrap.sh ──► configure.py ──► systemd ──► ??? ──► CONFIGURED SYSTEM!
+  (shell)          (python)          
                       ▲
                       │ reads
                  config.toml
