@@ -13,24 +13,29 @@ Personal dotfiles and unnecessarily complicated bootstrap system.
 
 ## Quickstart
 
-Fetch `bootstrap.sh` and run it with a profile. Replace `<profile>` with
-`minimal`, `server`, `laptop` or `desktop`.
+Replace `<profile>` with `minimal`, `server`, `laptop` or `desktop`.
 
-**curl**
+<details>
+  <summary>Fetch `bootstrap.sh` and run it with a profile</summary>
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
-  && chmod +x bootstrap.sh \
-  && ./bootstrap.sh <profile>
-```
+  Replace `<profile>` with `minimal`, `server`, `laptop` or `desktop`.
 
-**wget**
-
-```sh
-wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh \
-  && chmod +x bootstrap.sh \
-  && ./bootstrap.sh <profile>
-```
+  **curl**
+  
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
+    && chmod +x bootstrap.sh \
+    && ./bootstrap.sh <profile>
+  ```
+  
+  **wget**
+  
+  ```sh
+  wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh \
+    && chmod +x bootstrap.sh \
+    && ./bootstrap.sh <profile>
+  ```
+</details>
 
 ### Notes
 
