@@ -13,20 +13,15 @@ Personal dotfiles and unnecessarily complicated bootstrap system.
 
 ## Quickstart
 
-Fetch `bootstrap.sh` and run it with a profile. Replace `<profile>` with
-`minimal`, `server`, `laptop` or `desktop`.
-
-**curl**
+Fetch bootstrap.sh and run it with a profile:
 
 ```sh
+# Using curl
 curl -fsSL https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
   && chmod +x bootstrap.sh \
   && ./bootstrap.sh <profile>
-```
 
-**wget**
-
-```sh
+# Using wget
 wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh \
   && chmod +x bootstrap.sh \
   && ./bootstrap.sh <profile>
@@ -36,6 +31,7 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 
 - Profile is positional: `./bootstrap.sh desktop` (not a flag)
 - bootstrap.sh is the only file you manually download
+- Use `./bootstrap.sh edit` to launch the TUI editor (see [Editing the config](#editing-the-config))
 - Forking? Override REPO or REPO_URL, cut a release, and tag it **v1.0.0**
 
 ---
