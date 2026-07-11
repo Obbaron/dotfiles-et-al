@@ -13,10 +13,9 @@ Personal dotfiles and unnecessarily complicated bootstrap system.
 
 ## Quickstart
 
-Replace `<profile>` with `minimal`, `server`, `laptop` or `desktop`.
-
 <details>
   <summary>Fetch `bootstrap.sh` and run it with a profile</summary>
+
 
   Replace `<profile>` with `minimal`, `server`, `laptop` or `desktop`.
 
