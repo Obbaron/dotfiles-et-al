@@ -15,6 +15,7 @@ Personal dotfiles and unnecessarily complicated bootstrap system.
 
 <details>
   <summary>Fetch `bootstrap.sh` and run it with a profile</summary>
+  <br>
   
   **curl**
   
