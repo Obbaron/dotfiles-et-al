@@ -1,0 +1,75 @@
+# keybinds.toml - keybind overrides for dotfiles-tui
+#
+# Copy this file to $XDG_CONFIG_HOME/dotfiles-et-al/keybinds.toml
+#
+# There are two key sets, both always active:
+#   [native] = arrows / ctrl-chords
+#   [vim]    = hjkl / single letters
+# Override only what you want to change; anything omitted keeps its default.
+#
+# Keys use Textual key names ("ctrl+s", "escape", "pagedown", "G", ...).
+# Comma-separate alternatives: "escape,left".
+
+[native]
+# always active (letters are consumed first by focused text fields)
+"global.palette"   = "ctrl+p"
+"global.save"      = "ctrl+s"
+"global.quit"      = "ctrl+q"
+"global.validate"  = "ctrl+v"
+# tree navigation (the left list)
+"browse.down"      = "down"
+"browse.up"        = "up"
+"browse.first"     = "home"
+"browse.last"      = "end"
+"browse.page_down" = "pagedown"
+"browse.page_up"   = "pageup"
+"browse.open"      = "right,enter"
+"browse.back"      = "left,escape"
+# level-aware editing: what they do depends on the highlighted node
+"actions.edit"     = "e"
+"actions.new"      = "ctrl+n"
+"actions.rename"   = "ctrl+r"
+"actions.delete"   = "delete"
+# the ref picker (toggleable list with live preview)
+"picker.down"      = "down"
+"picker.up"        = "up"
+"picker.first"     = "home"
+"picker.last"      = "end"
+"picker.toggle"    = "space,right"
+"picker.accept"    = "enter"
+"picker.cancel"    = "escape,left"
+# the item form (fields focused, so chords only)
+"form.save"        = "ctrl+s"
+"form.cancel"      = "escape"
+
+[vim]
+# always active (letters are consumed first by focused text fields)
+"global.palette"   = "colon,ctrl+colon"
+"global.save"      = "w"
+"global.quit"      = "q"
+"global.validate"  = "v"
+# tree navigation (the left list)
+"browse.down"      = "j"
+"browse.up"        = "k"
+"browse.first"     = "g"
+"browse.last"      = "G"
+"browse.page_down" = "ctrl+d"
+"browse.page_up"   = "ctrl+u"
+"browse.open"      = "l"
+"browse.back"      = "h"
+# level-aware editing: what they do depends on the highlighted node
+"actions.edit"     = "e"
+"actions.new"      = "n"
+"actions.rename"   = "r"
+"actions.delete"   = "d"
+# the ref picker (toggleable list with live preview)
+"picker.down"      = "j"
+"picker.up"        = "k"
+"picker.first"     = "g"
+"picker.last"      = "G"
+"picker.toggle"    = "l"
+"picker.accept"    = "enter"
+"picker.cancel"    = "h"
+# the item form (fields focused, so chords only)
+"form.save"        = "ctrl+w"
+"form.cancel"      = "ctrl+q"
