@@ -1,12 +1,13 @@
 # dotfiles-et-al
 
-Personal dotfiles and unnecesarily complicated bootstrap system.
+Personal dotfiles and unnecessarily complicated bootstrap system.
 
 - **Cross-distro**: One config; many package managers.
 - **Declarative**: It _is_ about the destination; NOT the journey
 - **Idempotent**: Paranoia is a feature.
 - **Previewable**: Regret is cheaper in dry-run mode.
 - **Pinned**: Tagged versions stay still.
+- **Editable**: A built-in TUI edits the config without touching TOML by hand.
 
 ---
 
@@ -31,7 +32,8 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
   && ./bootstrap.sh <profile>
 ```
 
-#### Notes
+### Notes
+
 - Profile is positional: `./bootstrap.sh desktop` (not a flag)
 - bootstrap.sh is the only file you manually download
 - Forking? Override REPO or REPO_URL, cut a release, and tag it **v1.0.0**
@@ -45,13 +47,14 @@ wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/m
 - [Run lifecycle](#run-lifecycle)
 - [Pipeline](#pipeline)
 - [`config.toml` reference](#configtoml-reference)
+- [Editing the config](#editing-the-config)
 - [Package-name resolution](#package-name-resolution)
 - [Usage and recipes](#usage-and-recipes)
 - [Idempotency and safety](#idempotency-and-safety)
 - [Files](#files)
 - [Conventions](#conventions)
 - [Cutting a release](#cutting-a-release)
-- [Fine print](#known-caveats)
+- [Fine print](#fine-print)
 
 ---
 
@@ -64,7 +67,7 @@ The bootstrap script installs the first two for you when it can; the rest are si
 - **Supported package manager**: `apt-get`, `dnf`/`dnf5`/`yum`, `pacman`, `zypper`, `apk`, `emerge`, `xbps-install`.
 - **Network access**: to GitHub (repo + Nerd Fonts) and optionally `repology.org` for cross-distro package name lookups
 - **root or `sudo`**: for system-level package installs, system services, and `sudo = true` commands. User-scope work needs neither.
-- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Fine print](#fine_print)).
+- **systemd**: only for the `services` step. A profile declaring services on a non-systemd host fails fast (see [Fine print](#fine-print)).
 
 ---
 
@@ -102,7 +105,7 @@ End-to-end when you run `./bootstrap.sh <profile>`.
 1. **Ensure dependencies.**
    - Checks `git --version` against the 2.25 minimum and probes for a Python ≥ 3.11 interpreter
    - Installs whatever is missing via the detected package manager (using `sudo` when not root)
-   - Checks agains and fails if the versions are still too old
+   - Checks against and fails if the versions are still too old
 2. **Obtain the repo at `REF`, into `REPO_HOME`.**
    - **First run:** `git clone --branch <REF> --sparse` - a cone-mode sparse checkout of **root files only** (`configure.py`, `config.toml`, `install-pkg.sh`)
    - **Re-run:** `git fetch --tags origin` followed by a non-forced `checkout <REF>`
@@ -152,7 +155,7 @@ ones that are missing. It is also a standalone tool (see
 
 ---
 
-## Piepline
+## Pipeline
 
 Steps always run in this fixed order, regardless of how a profile lists them:
 
@@ -377,6 +380,26 @@ After the first run, your live config is at
 `~/.config/dotfiles-et-al/config.toml`). Edits there are preserved across
 re-runs; the repo copy is only used to seed a machine that has none.
 
+You can edit it by hand, or use the bundled TUI (next section).
+
+---
+
+## Editing the config
+
+`tui/` ships a two-panel terminal editor for `config.toml`: browse profiles,
+modules, and items with a live preview, edit through spec-aware forms, and
+save without disturbing comments. Launch it via bootstrap:
+
+```sh
+./bootstrap.sh edit
+```
+
+This fetches `tui/` on demand, provisions its dependencies in an isolated
+environment (uv or a cached venv), and edits your per-machine config; it does
+not apply anything. Re-run `./bootstrap.sh <profile>` to apply your changes.
+
+See [`tui/README.md`](tui/README.md) for keys, configuration, and details.
+
 ---
 
 ## Idempotency and safety
@@ -405,6 +428,8 @@ The governing principle is simple: **Never silently destroy user data. Never sil
 | `configure.py`   | Orchestrator; reads config, resolves the profile, applies steps. |
 | `install-pkg.sh` | Package installer (manifest / CLI-driven), with name resolution. |
 | `config.toml`    | Declarative config: profiles, packages, dirs, git, files, fonts, links, services, commands. |
+| `edit.py`        | Launches the config editor TUI (invoked by `bootstrap.sh edit`). |
+| `tui/`           | Two-panel TUI editor for `config.toml` (see [`tui/README.md`](tui/README.md)). |
 
 ---
 
