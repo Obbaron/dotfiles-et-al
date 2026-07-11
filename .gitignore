@@ -1,0 +1,22 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Packaging artifacts (from building the tui/ package)
+build/
+dist/
+*.egg-info/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
