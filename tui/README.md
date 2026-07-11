@@ -2,10 +2,7 @@
 
 Two-panel TUI editor for `config.toml` that drives `dotfiles-et-al`, built with
 [Textual](https://textual.textualize.io/) and
-[tomlkit](https://github.com/python-poetry/tomlkit). It presents the config as a
-tree — profiles and the eight steps, their modules, and each module's items —
-with a live preview of whatever the cursor is on, and edits the file in place
-without disturbing comments.
+[tomlkit](https://github.com/python-poetry/tomlkit).
 
 ---
 
