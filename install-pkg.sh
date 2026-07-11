@@ -29,7 +29,7 @@ _rank() { case "$1" in debug) echo 0 ;; info) echo 1 ;; warn) echo 2 ;; error) e
 log() {
     local lvl="$1"; shift
     [ "$(_rank "$lvl")" -ge "$(_rank "$LEVEL")" ] || return 0
-    local ts="" color="" reset=""
+    local ts="" color="" dim="" reset=""
     [ -n "$TIMESTAMP" ] && ts="$(date -u +%Y-%m-%dT%H:%M:%SZ) "
     if [ -z "${NO_COLOR:-}" ] && [ -t 2 ]; then
         case "$lvl" in
@@ -38,9 +38,9 @@ log() {
             warn)  color="${ESC}[33m" ;;
             error) color="${ESC}[31m" ;;
         esac
-        reset="${ESC}[0m"
+        dim="${ESC}[2m"; reset="${ESC}[0m"
     fi
-    printf '%s%s%-5s%s %s\n' "$ts" "$color" "$lvl" "$reset" "$*" >&2
+    printf '%s%s[install-pkg]%s %s%-5s%s %s\n' "$ts" "$dim" "$reset" "$color" "$lvl" "$reset" "$*" >&2
 }
 die() { log error "$*"; exit 1; }
 

@@ -50,7 +50,7 @@ def ensure_tui_present(home: Path, dry_run: bool) -> Path:
     cmd = ["git", "-C", str(home), "sparse-checkout", "set", *dirs]
 
     if dry_run:
-        print(f"[edit] would run: {' '.join(cmd)}")
+        configure.log(f"would run: {' '.join(cmd)}", tag="[edit]")
         return tui
 
     try:
@@ -89,7 +89,7 @@ def _provision_venv(tui_dir: Path, home: Path) -> Path:
     if tui_exe.exists():
         return tui_exe
 
-    print(f"[edit] provisioning TUI env at {venv}")
+    configure.log(f"provisioning TUI env at {venv}", tag="[edit]")
 
     try:
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -119,14 +119,16 @@ def launch_editor(home: Path, config_path: Path, dry_run: bool) -> int:
 
     if dry_run:
         if have_uv:
-            print(
-                f"[edit] would run: uv tool run --from {tui_dir} "
-                f"{TUI_COMMAND} {' '.join(tui_args)}"
+            configure.log(
+                f"would run: uv tool run --from {tui_dir} "
+                f"{TUI_COMMAND} {' '.join(tui_args)}",
+                tag="[edit]",
             )
         else:
-            print(
-                f"[edit] would provision a venv from {tui_dir} and run: "
-                f"{TUI_COMMAND} {' '.join(tui_args)}"
+            configure.log(
+                f"would provision a venv from {tui_dir} and run: "
+                f"{TUI_COMMAND} {' '.join(tui_args)}",
+                tag="[edit]",
             )
         return 0
 
@@ -145,7 +147,7 @@ def launch_editor(home: Path, config_path: Path, dry_run: bool) -> int:
     else:
         cmd = [str(_provision_venv(tui_dir, home)), *tui_args]
 
-    print(f"[edit] launching editor via {'uv' if have_uv else 'venv'}")
+    configure.log(f"launching editor via {'uv' if have_uv else 'venv'}", tag="[edit]")
 
     return subprocess.run(cmd, check=False).returncode
 
@@ -195,7 +197,7 @@ def main(argv: list[str]) -> int:
 
     if not args.dry_run:
         _validate_config(config_path)
-        print(f"[edit] saved {config_path}")
+        configure.log(f"saved {config_path}", tag="[edit]")
 
     return 0
 

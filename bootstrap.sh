@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./bootstrap.sh <profile> [ARGS...]   ARGS pass through to configure.py
-#   ./bootstrap.sh edit                  open the config.toml editor (no profile)
+
 # Config:
 #   REF        git tag (or ref) to clone/checkout
 #   REPO       owner/name
@@ -27,8 +27,22 @@ MIN_GIT_MAJOR=2
 MIN_GIT_MINOR=25
 DRY_RUN="${DRY_RUN:-}"
 
-say() { printf '[bootstrap] %s\n' "$*" >&2; }
-die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
+ESC=$(printf '\033')
+log() {
+    local lvl="$1" color="" dim="" reset=""; shift
+    if [ -z "${NO_COLOR:-}" ] && [ -t 2 ]; then
+        case "$lvl" in
+            debug) color="${ESC}[2m"  ;;
+            info)  color="${ESC}[36m" ;;
+            warn)  color="${ESC}[33m" ;;
+            error) color="${ESC}[31m" ;;
+        esac
+        dim="${ESC}[2m"; reset="${ESC}[0m"
+    fi
+    printf '%s[bootstrap]%s %s%-5s%s %s\n' "$dim" "$reset" "$color" "$lvl" "$reset" "$*" >&2
+}
+say() { log info "$@"; }
+die() { log error "$@"; exit 1; }
 
 run_priv() {
     if [ -n "$DRY_RUN" ]; then printf '[bootstrap] + %s\n' "$*" >&2; return 0; fi
@@ -123,10 +137,6 @@ update_repo() {
 main() {
     local need py
 
-    case "${1:-}" in
-        "") die "usage: bootstrap.sh <profile> | edit" ;;
-    esac
-
     need=""
     if git_ok; then
         say "git ok: $(git --version)"
@@ -161,28 +171,12 @@ main() {
         clone_repo
     fi
 
-    case "${1:-}" in
-        edit)
-            shift
-            [ "$#" -eq 0 ] || die "edit takes no arguments (got: $*)"
-            if [ -n "$DRY_RUN" ]; then
-                say "dry run: would exec ${py:-python3} $REPO_HOME/edit.py"
-                return 0
-            fi
-            [ -f "$REPO_HOME/edit.py" ] \
-                || die "editor not found: $REPO_HOME/edit.py"
-            say "exec edit.py"
-            exec "$py" "$REPO_HOME/edit.py"
-            ;;
-        *)
-            if [ -n "$DRY_RUN" ]; then
-                say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
-                return 0
-            fi
-            say "exec configure.py"
-            exec "$py" "$REPO_HOME/configure.py" "$@"
-            ;;
-    esac
+    if [ -n "$DRY_RUN" ]; then
+        say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
+        return 0
+    fi
+    say "exec configure.py"
+    exec "$py" "$REPO_HOME/configure.py" "$@"
 }
 
 main "$@"
