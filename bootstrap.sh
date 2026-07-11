@@ -7,6 +7,7 @@
 #
 # Usage:
 #   ./bootstrap.sh <profile> [ARGS...]   ARGS pass through to configure.py
+#   ./bootstrap.sh edit                  open the config.toml editor (no profile)
 # Config:
 #   REF        git tag (or ref) to clone/checkout
 #   REPO       owner/name
@@ -122,6 +123,10 @@ update_repo() {
 main() {
     local need py
 
+    case "${1:-}" in
+        "") die "usage: bootstrap.sh <profile> | edit" ;;
+    esac
+
     need=""
     if git_ok; then
         say "git ok: $(git --version)"
@@ -156,12 +161,28 @@ main() {
         clone_repo
     fi
 
-    if [ -n "$DRY_RUN" ]; then
-        say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
-        return 0
-    fi
-    say "exec configure.py"
-    exec "$py" "$REPO_HOME/configure.py" "$@"
+    case "${1:-}" in
+        edit)
+            shift
+            [ "$#" -eq 0 ] || die "edit takes no arguments (got: $*)"
+            if [ -n "$DRY_RUN" ]; then
+                say "dry run: would exec ${py:-python3} $REPO_HOME/edit.py"
+                return 0
+            fi
+            [ -f "$REPO_HOME/edit.py" ] \
+                || die "editor not found: $REPO_HOME/edit.py"
+            say "exec edit.py"
+            exec "$py" "$REPO_HOME/edit.py"
+            ;;
+        *)
+            if [ -n "$DRY_RUN" ]; then
+                say "dry run: would exec ${py:-python3} $REPO_HOME/configure.py $*"
+                return 0
+            fi
+            say "exec configure.py"
+            exec "$py" "$REPO_HOME/configure.py" "$@"
+            ;;
+    esac
 }
 
 main "$@"
