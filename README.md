@@ -15,6 +15,22 @@ Personal dotfiles and unnecessarily complicated bootstrap system.
 
 Fetch bootstrap.sh and run it with a profile:
 
+=== curl
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh -o bootstrap.sh \
+    && chmod +x bootstrap.sh \
+    && ./bootstrap.sh <profile>
+  ```
+
+=== wget
+
+  ```sh
+  wget -qO bootstrap.sh https://raw.githubusercontent.com/Obbaron/dotfiles-et-al/main/bootstrap.sh \
+    && chmod +x bootstrap.sh \
+    && ./bootstrap.sh <profile>
+  ```
+
 <details>
   <summary>curl</summary>
   
