@@ -25,12 +25,12 @@ from pathlib import Path
 
 from textual.binding import Binding
 
-# action id -> (native keys, vim keys)
-# NOTE: Comma-separated keys are alternatives
+# action id -> (native keys, vim keys). Comma-separated keys are alternatives.
 DEFAULT_KEYS: dict[str, tuple[str, str]] = {
     # global (always active; letters are consumed first by focused text widgets)
-    # `:` opens the palette vim-style; inside a text field `:` types a colon, so
-    # ctrl+: is the escape hatch; ctrl+p always works.
+    # `:` opens the palette vim-style; inside a text field `:` types a colon,
+    # so ctrl+: is the from-a-text-field escape hatch (needs a terminal that
+    # can send it, e.g. kitty keyboard protocol); ctrl+p always works.
     "global.palette": ("ctrl+p", "colon,ctrl+colon"),
     "global.save": ("ctrl+s", "w"),
     "global.quit": ("ctrl+q", "q"),
@@ -44,7 +44,7 @@ DEFAULT_KEYS: dict[str, tuple[str, str]] = {
     "browse.page_up": ("pageup", "ctrl+u"),
     "browse.open": ("right,enter", "l"),
     "browse.back": ("left,escape", "h"),
-    # level-aware editor actions (depends on highlighted node)
+    # level-aware editor actions (what they do depends on the highlighted node)
     "actions.edit": ("e", "e"),
     "actions.new": ("ctrl+n", "n"),
     "actions.rename": ("ctrl+r", "r"),  # rename profile / edit requires
@@ -80,7 +80,15 @@ def pair(
     action_native: str | None = None,
     action_vim: str | None = None,
 ) -> list[Binding]:
-    """Pair native+vim keybinds for one action"""
+    """The two Bindings (native + vim) for one action.
+
+    The footer displays the **native** key (unless ``show=False``); the vim
+    binding is never footered, to keep the bar compact. Both carry the
+    description so the keys panel (F1) labels every binding.
+    ``action_native`` / ``action_vim`` allow the rare case where the two
+    sets need different handlers. Sharing one action lets the keys panel
+    group both sets' keys into a single row.
+    """
     native_keys, vim_keys = DEFAULT_KEYS[action_id]
     return [
         Binding(
@@ -107,7 +115,7 @@ def load_user_keymap(path: Path | None = None) -> tuple[dict[str, str], list[str
     """Read keybinds.toml into a Textual keymap ({binding_id: keys}).
 
     Returns the keymap plus a list of human-readable warnings for entries
-    that could not be applied.
+    that could not be applied. A missing file is not an error.
     """
     path = path or keybinds_path()
     if not path.is_file():

@@ -1,4 +1,4 @@
-"""Persisted UI preferences for dotfiles-tui"""
+"""Persisted UI preferences for dotfiles-tui."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ def settings_path() -> Path:
 
 
 def load_settings(path: Path | None = None) -> dict[str, object]:
+    """Return the settings mapping, or {} if absent/unreadable/malformed."""
     path = path or settings_path()
     try:
         with path.open("rb") as fh:
@@ -29,11 +30,17 @@ def load_settings(path: Path | None = None) -> dict[str, object]:
 
 
 def load_theme(path: Path | None = None) -> str:
+    """The persisted theme name, or the default when none is stored."""
     value = load_settings(path).get("theme")
     return value if isinstance(value, str) and value else DEFAULT_THEME
 
 
 def save_theme(theme: str, path: Path | None = None) -> None:
+    """Persist the chosen theme, merging into any existing settings.
+
+    Best-effort: failure to write (e.g. an unwritable config dir) is
+    swallowed so it never interrupts the session.
+    """
     path = path or settings_path()
     data = load_settings(path)
     data["theme"] = theme

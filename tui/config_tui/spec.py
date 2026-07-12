@@ -1,4 +1,9 @@
-"""Schema knowledge and validation for config.toml"""
+"""Schema knowledge and validation for config.toml.
+
+Everything in this module is derived from config-toml-spec.md. It operates on
+plain Python data (dicts/lists/strings/bools); callers holding a tomlkit
+document should pass ``doc.unwrap()`` (see ``as_plain``).
+"""
 
 from __future__ import annotations
 

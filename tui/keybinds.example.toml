@@ -1,10 +1,10 @@
-# keybinds.toml - keybind overrides for dotfiles-tui
+# keybinds.toml - user keybind overrides for dotfiles-tui
 #
 # Copy this file to $XDG_CONFIG_HOME/dotfiles-et-al/keybinds.toml
 #
 # There are two key sets, both always active:
-#   [native] = arrows / ctrl-chords
-#   [vim]    = hjkl / single letters
+#   [native] - arrows / ctrl-chords (these are what the bottom bar shows)
+#   [vim]    - hjkl and single letters
 # Override only what you want to change; anything omitted keeps its default.
 #
 # Keys use Textual key names ("ctrl+s", "escape", "pagedown", "G", ...).

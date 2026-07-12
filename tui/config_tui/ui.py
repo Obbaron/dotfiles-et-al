@@ -1,4 +1,4 @@
-"""The two-panel config editor.
+"""The two-panel config editor (archinstall style).
 
 Layout: the LEFT list is where control lives; the RIGHT panel previews the
 highlighted node's children. Enter/l descends; h/escape ascends, restoring
@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+from config_tui import spec
+from config_tui.keymap import keybinds_path, load_user_keymap, pair
+from config_tui.settings import load_theme, save_theme
+from config_tui.store import ConfigStore, StoreError
 from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
@@ -31,11 +35,6 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
-
-from config_tui import spec
-from config_tui.keymap import keybinds_path, load_user_keymap, pair
-from config_tui.settings import load_theme, save_theme
-from config_tui.store import ConfigStore, StoreError
 
 ICONS: dict[str, str] = {
     "profiles": "\uf007",
@@ -89,7 +88,8 @@ class Node:
 
 
 def theme_palette(app: App) -> dict[str, str]:
-    """Concrete colors for Rich renderables."""
+    """Concrete colors for Rich renderables, resolved from the active theme
+    (CSS gets theme variables directly; Rich styles need real colors)."""
     tv = app.theme_variables
     return {
         "title": tv.get("secondary", tv.get("primary", "#56b6c2")),
@@ -101,7 +101,7 @@ def theme_palette(app: App) -> dict[str, str]:
     }
 
 
-# ROWS
+# ROW
 def sidebar_row(icon: str, name: str, count: str, pal: dict[str, str]) -> Table:
     grid = Table.grid(padding=(0, 1), expand=True)
     grid.add_column(width=2, no_wrap=True)
@@ -144,7 +144,7 @@ def module_preview(
     pal: dict[str, str],
     heading: bool = False,
 ) -> list[Option | None]:
-    """Preview rows for one module."""
+    """Preview rows for one module: optional heading, requires, items."""
     rows: list[Option | None] = []
 
     if heading:
@@ -166,7 +166,7 @@ def module_preview(
 def ref_preview(
     store: ConfigStore, ref: str, pal: dict[str, str]
 ) -> list[Option | None]:
-    """Preview rows for a ref."""
+    """Preview rows for a ref: every module it resolves to, with contents."""
     targets = spec.ref_targets(store.plain(), ref)
 
     if not targets:
@@ -201,7 +201,11 @@ class HeaderBar(Static):
 
 
 class FooterBar(Static):
-    """Key hints: a constant set plus context-dependent extras."""
+    """Key hints: a constant set plus context-dependent extras.
+
+    Labels show the default keys; remaps via keybinds.toml change behavior
+    but not (yet) these hints.
+    """
 
     DEFAULT_CONSTANT = [
         ("esc", "Back"),
@@ -224,7 +228,6 @@ class FooterBar(Static):
             list(constant) if constant is not None else list(self.DEFAULT_CONSTANT)
         )
         self._extras = extras
-
         self.refresh()
 
     def render(self) -> Table:
@@ -248,10 +251,10 @@ class FooterBar(Static):
 
 
 class NavList(OptionList):
-    """Left column: primary control. Navigation, sharing OptionList's
-    action names so the keys panel shows one row per action. Inherited
-    horizontal-scroll keys are shadowed I.E. left = Back, shown;
-    ctrl+pgup/pgdn = page vertically, hidden."""
+    """Left column: where control lives. Navigation binds here (dual key
+    sets from the keymap), sharing OptionList's action names so the keys
+    panel shows one row per action. Inherited horizontal-scroll keys are
+    shadowed (left is Back; ctrl+pgup/pgdn page vertically, hidden)."""
 
     BINDINGS: ClassVar = [
         *pair("browse.up", "cursor_up", "Up", show=False),
@@ -268,7 +271,7 @@ class NavList(OptionList):
 
 
 class PickerList(SelectionList[str]):
-    """Toggleable ref list for the picker screen."""
+    """Toggleable ref list for the picker screen (same navigation feel)."""
 
     BINDINGS: ClassVar = [
         *pair("picker.up", "cursor_up", "Up", show=False),
@@ -289,7 +292,8 @@ class PreviewList(OptionList, can_focus=False):
 class FormPanel(VerticalScroll):
     """Container for the in-panel item form. Its bindings are only active
     while focus is inside the form, so ctrl+q cancels the form here but
-    still quits the app elsewhere."""
+    still quits the app elsewhere. form.save is priority so ctrl+w beats
+    Input's delete-word-left, per the keybind spec."""
 
     BINDINGS: ClassVar = [
         *pair("form.save", "screen.form_save", "Save item", priority=True, show=False),
@@ -340,7 +344,7 @@ class CmdLine(Horizontal):
 
 # VALIDATION
 class ValidationScreen(ModalScreen[None]):
-    """Centered popup with the validation report."""
+    """Centered popup with the validation report; esc/enter/v closes."""
 
     BINDINGS: ClassVar = [
         Binding("escape,enter,v,ctrl+v", "dismiss_popup", "Close", show=False),
@@ -368,11 +372,13 @@ class ValidationScreen(ModalScreen[None]):
             Text(title, style=f"bold {pal['success'] if ok else pal['error']}")
         )
         body = self.query_one("#val-issues", VerticalScroll)
+
         if ok:
             body.mount(Static(Text("✓ no issues found", style=pal["success"])))
         else:
             for issue in self._issues:
                 body.mount(Static(detail_lines([(issue.location, issue.message)], pal)))
+
         self.query_one("#val-hint", Static).update(
             Text.assemble(("esc", f"bold {pal['accent']}"), (" close", pal["muted"]))
         )
@@ -387,13 +393,15 @@ class RefPickerScreen(Screen[list[str] | None]):
 
     A ``*.name`` wildcard stands for every ``step.name`` module, so while a
     wildcard is selected its individual members are redundant: they are
-    hidden from the list. The visible ``SelectionList`` is rebuilt whenever
-    a wildcard's state changes; ``_selected`` is the stable source of truth
-    across rebuilds.
+    hidden from the list (and left unselected) to avoid the visual
+    contradiction of a wildcard and its members toggling independently.
+    Unselecting the wildcard brings the members back, unselected.
+
+    The visible ``SelectionList`` is rebuilt whenever a wildcard's state
+    changes; ``_selected`` is the stable source of truth across rebuilds.
     """
 
     BINDINGS: ClassVar = [
-        # Override Enter behavior
         *pair("picker.accept", "accept", "Accept", priority=True, show=False),
     ]
 
@@ -438,7 +446,7 @@ class RefPickerScreen(Screen[list[str] | None]):
         self.on_theme_refresh()
 
     def _hidden_members(self) -> set[str]:
-        """Members covered by a currently-selected wildcard I.E. hidden."""
+        """Members covered by a currently-selected wildcard (so, hidden)."""
         hidden: set[str] = set()
         for ref in self._selected:
             hidden |= self._members.get(ref, set())
@@ -449,7 +457,11 @@ class RefPickerScreen(Screen[list[str] | None]):
         return [ref for ref in self._choices if ref not in hidden]
 
     def _populate(self, keep_ref: str | None = None) -> None:
-        """(Re)build the SelectionList from the model, filtering hidden members."""
+        """(Re)build the SelectionList from the model, filtering hidden members.
+
+        keep_ref, when still visible, is re-highlighted so rebuilding the
+        list doesn't jump the cursor.
+        """
         picker = self.query_one(PickerList)
         visible = self._visible_choices()
         self._suppress = True
@@ -459,7 +471,6 @@ class RefPickerScreen(Screen[list[str] | None]):
         )
         self._suppress = False
 
-        # Rebuild list =/= jump cursor
         if visible:
             target = keep_ref if keep_ref in visible else None
             picker.highlighted = visible.index(target) if target else 0
@@ -512,12 +523,14 @@ class RefPickerScreen(Screen[list[str] | None]):
         visible = self._visible_choices()
         now_selected = set(picker.selected)
 
+        # Sync the model for every visible ref (captures the just-toggled one).
         for ref in visible:
             if ref in now_selected:
                 self._selected.add(ref)
             else:
                 self._selected.discard(ref)
 
+        # Clean slate: members covered by a selected wildcard are dropped.
         hidden = self._hidden_members()
         needs_rebuild = set(visible) != set(self._visible_choices())
 
@@ -526,6 +539,8 @@ class RefPickerScreen(Screen[list[str] | None]):
             needs_rebuild = True
 
         if needs_rebuild:
+            # Rebuild after this event settles: clearing/re-adding options
+            # mid-dispatch tears down the widget the event came from.
             keep = self._current_ref()
             self.call_after_refresh(self._populate_and_preview, keep)
         else:
@@ -573,7 +588,7 @@ class EditorScreen(Screen):
         self._form_node: Node | None = None
         self._form_step: str = ""
 
-    # composition
+    # COMPOSITION
     def compose(self) -> ComposeResult:
         yield HeaderBar(self.store)
         yield FooterBar(id="footer")
@@ -604,7 +619,7 @@ class EditorScreen(Screen):
         self.rebuild(highlight=nav.highlighted or 0 if highlight is None else highlight)
         self.query_one(HeaderBar).refresh()
 
-    # tree
+    # TREE
     def _children(self, node: Node | None) -> list[Node]:
         if node is None:
             return [Node("section", "profiles")] + [
@@ -633,7 +648,7 @@ class EditorScreen(Screen):
 
         return []
 
-    # labels / previews
+    # LABELS/PREVIEWS
     def _nav_option(self, node: Node, pal: dict[str, str]) -> Option:
         if node.kind == "section":
             count = (
@@ -735,7 +750,6 @@ class EditorScreen(Screen):
                 resolved = ", ".join(f"{s}.{m}" for s, m in targets) or "(unresolved!)"
                 arrow = "→" if targets else "✗"
                 rows.append(Option(preview_row(ref, arrow, resolved, (width, 1), pal)))
-
             return rows
 
         if node.kind == "module":
@@ -754,7 +768,7 @@ class EditorScreen(Screen):
 
         return [Option(detail_lines(pairs, pal))]
 
-    # rebuild
+    # REBUILD
     def rebuild(self, highlight: int = 0) -> None:
         pal = theme_palette(self.app)
         nav = self.query_one(NavList)
@@ -766,9 +780,10 @@ class EditorScreen(Screen):
         options: list[Option | None] = [
             self._nav_option(node, pal) for node in self._nav_nodes
         ]
-        if parent is None and len(options) > 1:
-            options.insert(1, None)  # divide higher-level profiles from steps
 
+        if parent is None and len(options) > 1:
+            # profiles are higher-level than the steps: divide them
+            options.insert(1, None)
         nav.add_options(options)
 
         crumbs = [n.name or n.section for n in self.path]
@@ -832,8 +847,8 @@ class EditorScreen(Screen):
             preview.highlighted = 0
 
         crumbs = [n.name or n.section for n in self.path]
-
         selected = ""
+
         if node is not None:
             if node.kind == "item":
                 item = self.store.items(node.section, node.name)[node.index]
@@ -843,7 +858,7 @@ class EditorScreen(Screen):
 
         self.query_one(StatusLine).show(crumbs, selected)
 
-    # navigation
+    # NAVIGATION
     def _nav(self) -> NavList:
         return self.query_one(NavList)
 
@@ -904,7 +919,7 @@ class EditorScreen(Screen):
         self.path.pop()
         self.rebuild(highlight=restore)
 
-    # command line
+    # COMMAND LINE
     def _cmd(self) -> CmdLine:
         return self.query_one("#cmdline", CmdLine)
 
@@ -976,7 +991,7 @@ class EditorScreen(Screen):
         self.query_one("#footer", FooterBar).set_hints(self._footer_extras())
         self._nav().focus()
 
-    # item form
+    # ITEM FORM
     def _open_form(self, node: Node | None) -> None:
         """node=None means a blank 'new item' form for the current module."""
         pal = theme_palette(self.app)
@@ -1052,11 +1067,10 @@ class EditorScreen(Screen):
             options = [(name, name) for name in spec.XDG_LABELS]
             if value and value not in spec.XDG_LABELS:
                 options.append((str(value), str(value)))
-
             kwargs: dict[str, Any] = {"allow_blank": True, "id": f"f-{field}"}
+
             if value:
                 kwargs["value"] = str(value)
-
             return Select(options, **kwargs)
 
         if field == "content":
@@ -1068,6 +1082,7 @@ class EditorScreen(Screen):
         """Read the form into a spec-valid item, preferring the minimal form
         (bare string when only the defining field is set)."""
         gathered: dict[str, Any] = {}
+
         for field in FORM_FIELDS[step]:
             widget = self.query_one(f"#f-{field}")
             if isinstance(widget, Switch):
@@ -1142,7 +1157,7 @@ class EditorScreen(Screen):
         self._mutated(highlight=keep)
         self.app.notify(f"updated {self._form_step} item")
 
-    # dismiss overlay
+    # DISMISS OVERLAY
     def action_dismiss_overlay(self) -> None:
         if self._mode in ("prompt", "confirm", "quit"):
             self._close_cmdline()
@@ -1157,7 +1172,7 @@ class EditorScreen(Screen):
             self._nav().focus()
             self.refresh_preview()
 
-    # level-aware triggers
+    # LEVEL-AWARE EDITOR TRIGGERS
     def _open_ref_picker(
         self, title: str, selected: list[str], apply: Any, exclude: str = ""
     ) -> None:
@@ -1326,8 +1341,8 @@ class ConfigEditorApp(App[None]):
     TITLE = "dotfiles-et-al config editor"
 
     BINDINGS: ClassVar = [
-        # Priority so the palette stays reachable from modal screens
-        # Keys like `:` still type into focused inputs
+        # Priority so the palette stays reachable from modal screens;
+        # printable keys like `:` still type into focused Inputs.
         *pair(
             "global.palette", "command_palette", "Commands", show=False, priority=True
         ),
@@ -1336,7 +1351,6 @@ class ConfigEditorApp(App[None]):
         *pair("global.quit", "quit", "Quit", show=False),
     ]
 
-    # Colors come from the active theme
     CSS = """
     HeaderBar {
         dock: top;
@@ -1463,10 +1477,8 @@ class ConfigEditorApp(App[None]):
             refresh = getattr(screen, "on_theme_refresh", None)
             if refresh is not None:
                 refresh()
-
             screen.refresh()
 
-    # save / quit
     def save_config(self) -> bool:
         """Validate (warn, don't block), save; True on success."""
         issues = spec.validate_config(self.store.plain())
@@ -1532,11 +1544,7 @@ class ConfigEditorApp(App[None]):
         self.exit()
 
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
-        """Palette entries, in a fixed order with vim-ex-style prefixes.
-
-        Textual's stock Keys/Theme/Screenshot are re-prefixed and reordered
-        among ours; Maximize and the stock Quit are dropped..
-        """
+        """Palette entries, in a fixed order with vim-ex-style prefixes."""
         stock = {c.title.lower(): c for c in super().get_system_commands(screen)}
 
         def relabel(key: str, label: str) -> Iterable[SystemCommand]:
@@ -1593,7 +1601,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     ConfigEditorApp(store).run()
-
     return 0
 
 

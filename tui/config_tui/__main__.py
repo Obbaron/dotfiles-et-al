@@ -15,7 +15,7 @@ def default_config_path() -> Path | None:
     """The config to edit when none is given.
 
     Prefers the live per-machine config seeded by configure.py, then falls back
-    to a config.toml in the current directory (repo template).
+    to a config.toml in the current directory (the repo template).
     """
     xdg = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
     candidates = (
