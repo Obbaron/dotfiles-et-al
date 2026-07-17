@@ -1,0 +1,70 @@
+[manager]
+cwd = { fg = "yellow", bold = true }
+
+hovered = { fg = "black", bg = "brightwhite", bold = true }
+preview_hovered = { fg = "black", bg = "brightwhite" }
+
+find_keyword = { fg = "black", bg = "yellow", bold = true }
+find_position = { fg = "yellow", bold = true }
+
+marker_selected = { fg = "green", bold = true }
+marker_copied = { fg = "yellow", bold = true }
+marker_cut = { fg = "red", bold = true }
+
+tab_active = { fg = "black", bg = "cyan", bold = true }
+tab_inactive = { fg = "white", bg = "black" }
+
+count_copied = { fg = "black", bg = "yellow" }
+count_cut = { fg = "black", bg = "red" }
+count_selected = { fg = "black", bg = "green" }
+
+border_style = { fg = "brightblack" }
+
+[status]
+separator_open = ""
+separator_close = ""
+
+mode_normal = { fg = "black", bg = "green", bold = true }
+mode_select = { fg = "black", bg = "yellow", bold = true }
+mode_unset = { fg = "black", bg = "red", bold = true }
+
+progress_label = { fg = "white", bold = true }
+progress_normal = { fg = "green", bg = "black" }
+
+[input]
+border = { fg = "cyan" }
+title = { fg = "cyan", bold = true }
+selected = { bg = "brightblack" }
+
+[select]
+border = { fg = "cyan" }
+active = { fg = "black", bg = "cyan", bold = true }
+
+[tasks]
+border = { fg = "cyan" }
+title = { fg = "cyan", bold = true }
+hovered = { fg = "black", bg = "brightwhite" }
+
+[which]
+mask = { bg = "black" }
+cand = { fg = "cyan" }
+rest = { fg = "white" }
+desc = { fg = "brightblack" }
+separator = " → "
+
+[help]
+on = { fg = "green", bold = true }
+run = { fg = "yellow", bold = true }
+desc = { fg = "white" }
+hovered = { bg = "brightblack" }
+footer = { fg = "black", bg = "cyan" }
+
+[filetype]
+rules = [
+    { name = "*/", fg = "cyan", bold = true },
+    { mime = "image/*", fg = "magenta" },
+    { mime = "video/*", fg = "red" },
+    { mime = "audio/*", fg = "yellow" },
+    { mime = "application/*", fg = "cyan" },
+    { mime = "text/*", fg = "white" },
+]
